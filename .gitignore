@@ -1,0 +1,10 @@
+*.log
+target/
+*.class
+.classpath
+.project
+.settings
+.cache
+*.swp
+*.pyc
+
