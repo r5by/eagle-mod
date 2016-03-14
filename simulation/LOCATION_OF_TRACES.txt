@@ -1,0 +1,3 @@
+The traces used for evaluating Hawk and Eagle are at:
+https://www.dropbox.com/sh/bhk5zxreyplus73/AADxmp60oqxh7jq9qkCzoJX5a?dl=0
+Note that this link may change in the future.
