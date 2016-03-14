@@ -138,6 +138,13 @@ Put it another way
                it dictates which jobs are short and long for comparison purposes between different systems and configurations.
 
 =====================================================================================================================================
+How do you get the numbers for the job running times?
+
+Each simulation outputs a file called "finished_file" which contains informaton about the jobs (one line for each job).
+Short jobs (according to parameter #4) are labelled with "by_def:  0" while long jobs are labelled with "by_def:  1".
+To present results for Hawk and Eagle, for each type of job (short/long) we collected the running times and then compute a CDF over time.
+
+=====================================================================================================================================
 Other consideration:
 
 - We strongly recommend using pypy instead of python to run the simulations.
