@@ -148,7 +148,7 @@ To present results for Hawk and Eagle, for each type of job (short/long) we coll
 Other consideration:
 
 - We strongly recommend using pypy instead of python to run the simulations.
-  With pypy simulations can finish 5-6 times faster.
+  With pypy the simulations can finish 5-6 times faster.
  
 - In extreme cases where a lot of workers are simulated the memory utilization can reach a few GB.
   For the Google trace running with 15000 workers the memory utilization was 2-3GB.
