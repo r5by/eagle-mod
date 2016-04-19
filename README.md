@@ -100,7 +100,7 @@ You can run an example with JavaSleep, for that you need to create a file with t
         -Dspark.broadcast.port=33644 \
         org.apache.spark.examples.JavaSleep "eagle@$SCHEDULER:20503" 5 3 `hostname` $SMALL "<path_to_input_file>"
 
-$SMALL can take the values: "small" or "big" depending on if its the centralized or the distributed (centralized --> big)
+SMALL can take the values: "small" or "big" depending on if its the centralized or the distributed (centralized --> big)
 
 2. Start the backends. This should run in each of the nodes
 
