@@ -371,7 +371,7 @@ public class NodeMonitor {
 	public boolean enqueueTasksCentralized(TEnqueueTaskReservationsRequest request, List<String> notExecutingLong, double longStatusTimestamp) {
 		assert (notExecutingLong.size() > 0);
 		LOG.info("EAGLE Received enqueue task from CENTRALIZED " + ipAddress + " longStatusTimestamp " + longStatusTimestamp + ", count not executing long "
-				+ notExecutingLong.size() + " first address " + notExecutingLong.get(0));
+				+ notExecutingLong.size());
 		this.longStatusTimestamp = longStatusTimestamp;
 		this.notExecutingLong = notExecutingLong;
 		if(gossiping)
