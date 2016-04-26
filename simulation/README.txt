@@ -1,3 +1,29 @@
+=====================================================================================================================================
+Prerequisites:
+
+- We strongly recommend using pypy instead of python to run the simulations.
+  With pypy version 5 the simulations can finish 5-6 times faster than with python.
+  
+- You also need to install in pypy/python a package that enables bitmap support.
+  Here are the steps to do that, applied to pypy:
+  1) cd to your pypy directory  
+  2) wget https://pypi.python.org/packages/source/b/bitmap/bitmap-0.0.5.tar.gz#md5=24df0ef3578323744103e279bbcfe48b 
+  3) tar xzvf bitmap-0.0.05.tar.gz
+  4) cd bitmap-0.0.5
+  5) ../bin/pypy setup.py install
+
+- It is better to run the simulator on machines with a good amount of RAM.
+  In extreme cases where a lot of workers are simulated the memory utilization can reach a few GB.
+  For the Google trace running with 15000 workers the memory utilization was 2-3GB.
+  The maximum we have seen was about 10GB for the Facebook trace with 170000 workers.
+
+- Keep in mind that even with pypy, more complex simulations will take a while to complete.
+  The simulations for the Yahoo and Cloudera traces are fairly fast (order of 5 minutes)
+  The Google trace can take 15-30 minutes.
+  The Facebook trace is the largest and may take more than 1 hour to simulate. 
+  We recommend using the Yahoo trace for debugging and running all traces in batch mode.
+
+=====================================================================================================================================
 The simulator allows you to simulate the behavior of the following systems:
 - Hawk 		(published in ATC 15)
 - Sparrow 	(published in SOSP 13)
@@ -138,21 +164,14 @@ Put it another way
                it dictates which jobs are short and long for comparison purposes between different systems and configurations.
 
 =====================================================================================================================================
-How do you get the numbers for the job running times?
+How do you get the results for the job running times?
 
 Each simulation outputs a file called "finished_file" which contains informaton about the jobs (one line for each job).
 Short jobs (according to parameter #4) are labelled with "by_def:  0" while long jobs are labelled with "by_def:  1".
 To present results for Hawk and Eagle, for each type of job (short/long) we collected the running times and then compute a CDF over time.
 
 =====================================================================================================================================
-Other consideration:
 
-- We strongly recommend using pypy instead of python to run the simulations.
-  With pypy the simulations can finish 5-6 times faster.
- 
-- In extreme cases where a lot of workers are simulated the memory utilization can reach a few GB.
-  For the Google trace running with 15000 workers the memory utilization was 2-3GB.
-  The maximum we have seen was about 10GB for the Facebook trace with 170000 workers.
 
-=====================================================================================================================================
+
 
