@@ -192,10 +192,9 @@ class PeriodicTimerEvent(Event):
         big_load         =str(int(10000*(1-self.simulation.free_slots_big_partition*1.0/len(self.simulation.big_partition_workers)))/100.0)
         small_not_big_load ="N/A"
         if(len(self.simulation.small_not_big_partition_workers)!=0):
-                small_not_big_load        =str(int(10000*(1-self.simulation.free_slots_small_not_big_partition*1.0/len(self.simulation.small_not_big_partition_workers)))/100.0)
+            small_not_big_load        =str(int(10000*(1-self.simulation.free_slots_small_not_big_partition*1.0/len(self.simulation.small_not_big_partition_workers)))/100.0)
 
         print >> load_file,"total_load: "+ total_load + " small_load: "+small_load+ " big_load: "+big_load+ " small_not_big_load: "+small_not_big_load+" current_time: " + str(current_time) 
-
 
         if(not self.simulation.event_queue.empty()):
             new_events.append((current_time+MONITOR_INTERVAL,self))
@@ -549,8 +548,8 @@ class Simulation(object):
     def find_workers_random(self, probe_ratio, nr_tasks, possible_worker_indices):
         chosen_worker_indices=[]
         for it in range(0,probe_ratio*nr_tasks):
-                rnd_index = random.randint(0,len(possible_worker_indices)-1)
-                chosen_worker_indices.append(possible_worker_indices[rnd_index])
+            rnd_index = random.randint(0,len(possible_worker_indices)-1)
+            chosen_worker_indices.append(possible_worker_indices[rnd_index])
         return chosen_worker_indices
 
 
@@ -598,8 +597,8 @@ class Simulation(object):
 
             next_queue_length,next_worker=prio_queue.get()
             while(queue_length<=next_queue_length and len(chosen_worker_indices) < workers_needed):
-                    chosen_worker_indices.append(worker)
-                    queue_length += estimated_task_duration
+                chosen_worker_indices.append(worker)
+                queue_length += estimated_task_duration
 
             prio_queue.put((queue_length,worker));
             queue_length=next_queue_length
@@ -633,25 +632,25 @@ class Simulation(object):
 
     #Simulation class
     def try_round_of_probing(self, current_time, job, worker_list, probe_events, roundnr):
-            successful_worker_indices = []
-            id_worker_with_newest_btmap = -1
-            freshest_btmap_tstamp = self.btmap_tstamp
+        successful_worker_indices = []
+        id_worker_with_newest_btmap = -1
+        freshest_btmap_tstamp = self.btmap_tstamp
 
-            for worker_index in worker_list:
-                if(not self.workers[worker_index].executing_big and not self.workers[worker_index].queued_big):
-                    probe_events.append((current_time + NETWORK_DELAY*(roundnr/2+1), ProbeEvent(self.workers[worker_index], job.id, job.estimated_task_duration, None)))
-                    job.probed_workers.add(worker_index)
-                    successful_worker_indices.append(worker_index)
-                if (self.workers[worker_index].btmap_tstamp > freshest_btmap_tstamp):
-                    id_worker_with_newest_btmap = worker_index
-                    freshest_btmap_tstamp       = self.workers[worker_index].btmap_tstamp
+        for worker_index in worker_list:
+            if(not self.workers[worker_index].executing_big and not self.workers[worker_index].queued_big):
+                probe_events.append((current_time + NETWORK_DELAY*(roundnr/2+1), ProbeEvent(self.workers[worker_index], job.id, job.estimated_task_duration, None)))
+                job.probed_workers.add(worker_index)
+                successful_worker_indices.append(worker_index)
+            if (self.workers[worker_index].btmap_tstamp > freshest_btmap_tstamp):
+                id_worker_with_newest_btmap = worker_index
+                freshest_btmap_tstamp       = self.workers[worker_index].btmap_tstamp
 
-            if (id_worker_with_newest_btmap != -1):                    
-                    self.btmap = copy.deepcopy(self.workers[id_worker_with_newest_btmap].btmap)
-                    self.btmap_tstamp = self.workers[id_worker_with_newest_btmap].btmap_tstamp
+        if (id_worker_with_newest_btmap != -1):                    
+            self.btmap = copy.deepcopy(self.workers[id_worker_with_newest_btmap].btmap)
+            self.btmap_tstamp = self.workers[id_worker_with_newest_btmap].btmap_tstamp
 
-            missing_probes = len(worker_list)-len(successful_worker_indices)
-            return len(successful_worker_indices), successful_worker_indices
+        missing_probes = len(worker_list)-len(successful_worker_indices)
+        return len(successful_worker_indices), successful_worker_indices
         
 
     #Simulation class
