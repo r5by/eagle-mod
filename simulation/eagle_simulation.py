@@ -48,10 +48,10 @@ class Job(object):
 
         #dephase the incoming job in case it has the exact submission time as another already submitted job
         if self.start_time not in job_start_tstamps:
-            job_start_tstamps[self.start_time]=self.start_time
+            job_start_tstamps[self.start_time] = self.start_time
         else:
-            job_start_tstamps[self.start_time]+=0.01
-            self.start_time=job_start_tstamps[self.start_time]
+            job_start_tstamps[self.start_time] += 0.01
+            self.start_time = job_start_tstamps[self.start_time]
         
         self.id = Job.job_count
         Job.job_count += 1
@@ -76,13 +76,13 @@ class Job(object):
         if   estimate_distribution == EstimationErrorDistribution.MEAN:
             self.estimated_task_duration = mean_task_duration
         elif estimate_distribution == EstimationErrorDistribution.CONSTANT:
-            self.estimated_task_duration = mean_task_duration+off_mean_top*mean_task_duration
+            self.estimated_task_duration = int(mean_task_duration+off_mean_top*mean_task_duration)
         elif estimate_distribution == EstimationErrorDistribution.RANDOM:
             top = off_mean_top*mean_task_duration
             bottom = off_mean_bottom*mean_task_duration
             self.estimated_task_duration = int(random.uniform(bottom,top)) 
-            assert(self.estimated_task_duration<=int(top))
-            assert(self.estimated_task_duration>=int(bottom))
+            assert(self.estimated_task_duration <= int(top))
+            assert(self.estimated_task_duration >= int(bottom))
 
         self.probed_workers = set()
 
@@ -105,12 +105,12 @@ class Job(object):
 #####################################################################################################################
 class Stats(object):
 
-    STATS_STEALING_MESSAGES=0
-    STATS_SH_QUEUED_BEHIND_BIG=0
-    STATS_SH_EXEC_IN_BP=0
-    STATS_TOTAL_STOLEN_TASKS=0
-    STATS_SUCCESSFUL_STEAL_ATTEMPTS=0
-    STATS_SH_WAITED_FOR_BIG=0
+    STATS_STEALING_MESSAGES = 0
+    STATS_SH_QUEUED_BEHIND_BIG = 0
+    STATS_SH_EXEC_IN_BP = 0
+    STATS_TOTAL_STOLEN_TASKS = 0
+    STATS_SUCCESSFUL_STEAL_ATTEMPTS = 0
+    STATS_SH_WAITED_FOR_BIG = 0
     
 #####################################################################################################################
 #####################################################################################################################
@@ -147,14 +147,22 @@ class JobArrival(Event, file):
                 possible_worker_indices = self.simulation.small_partition_workers
             if SYSTEM_SIMULATED == "IdealEagle":
                 possible_worker_indices = self.simulation.get_list_non_long_job_workers_from_btmap(self.simulation.cluster_status_keeper.get_btmap())
-            
+
             worker_indices = self.simulation.find_workers_random(PROBE_RATIO, self.job.num_tasks, possible_worker_indices)
 
         else:
             print current_time, ":   Big Job arrived!!", self.job.id, " num tasks ", self.job.num_tasks, " estimated_duration ", self.job.estimated_task_duration
             btmap = self.simulation.cluster_status_keeper.get_btmap()
 
-            if (self.simulation.SCHEDULE_BIG_CENTRALIZED):
+            if (SYSTEM_SIMULATED == "DLWL"):
+                if self.job.job_type_for_comparison == SMALL:
+                    possible_workers = self.simulation.small_partition_workers_hash
+                else:
+                    possible_workers = self.simulation.big_partition_workers_hash
+                estimated_task_durations = [self.job.estimated_task_duration for i in range(len(self.job.unscheduled_tasks))]
+                worker_indices = self.simulation.find_workers_dlwl(estimated_task_durations, self.simulation.shared_cluster_status, current_time, self.simulation, possible_workers)
+                self.simulation.cluster_status_keeper.update_workers_queue(worker_indices, True, self.job.estimated_task_duration)
+            elif (self.simulation.SCHEDULE_BIG_CENTRALIZED):
                 workers_queue_status = self.simulation.cluster_status_keeper.get_queue_status()
                 if SYSTEM_SIMULATED == "LWL" and self.job.job_type_for_comparison == SMALL:
                     possible_workers = self.simulation.small_partition_workers_hash
@@ -170,10 +178,13 @@ class JobArrival(Event, file):
 
         # Creating a new Job Arrival event for the next job in the trace
         line = self.jobs_file.readline()
-        if (line == ''):    return new_events
+        if (line == ''):
+            self.simulation.scheduled_last_job=True
+            return new_events
 
         self.job = Job(self.task_distribution, line, self.job.estimate_distribution, self.job.off_mean_bottom, self.job.off_mean_top)
         new_events.append((self.job.start_time, self))
+        self.simulation.jobs_scheduled+=1
         return new_events
 
 
@@ -185,19 +196,43 @@ class PeriodicTimerEvent(Event):
         self.simulation = simulation
 
     def run(self, current_time):
-        new_events=[]
+        new_events = []
 
-        total_load       =str(int(10000*(1-self.simulation.total_free_slots*1.0/(TOTAL_WORKERS*SLOTS_PER_WORKER)))/100.0)
-        small_load       =str(int(10000*(1-self.simulation.free_slots_small_partition*1.0/len(self.simulation.small_partition_workers)))/100.0)
-        big_load         =str(int(10000*(1-self.simulation.free_slots_big_partition*1.0/len(self.simulation.big_partition_workers)))/100.0)
+        total_load       = str(int(10000*(1-self.simulation.total_free_slots*1.0/(TOTAL_WORKERS*SLOTS_PER_WORKER)))/100.0)
+        small_load       = str(int(10000*(1-self.simulation.free_slots_small_partition*1.0/len(self.simulation.small_partition_workers)))/100.0)
+        big_load         = str(int(10000*(1-self.simulation.free_slots_big_partition*1.0/len(self.simulation.big_partition_workers)))/100.0)
         small_not_big_load ="N/A"
         if(len(self.simulation.small_not_big_partition_workers)!=0):
-            small_not_big_load        =str(int(10000*(1-self.simulation.free_slots_small_not_big_partition*1.0/len(self.simulation.small_not_big_partition_workers)))/100.0)
+            small_not_big_load        = str(int(10000*(1-self.simulation.free_slots_small_not_big_partition*1.0/len(self.simulation.small_not_big_partition_workers)))/100.0)
 
-        print >> load_file,"total_load: "+ total_load + " small_load: "+small_load+ " big_load: "+big_load+ " small_not_big_load: "+small_not_big_load+" current_time: " + str(current_time) 
+        print >> load_file,"total_load: " + total_load + " small_load: " + small_load + " big_load: " + big_load + " small_not_big_load: " + small_not_big_load+" current_time: " + str(current_time) 
 
         if(not self.simulation.event_queue.empty()):
-            new_events.append((current_time+MONITOR_INTERVAL,self))
+            new_events.append((current_time + MONITOR_INTERVAL,self))
+        return new_events
+
+
+#####################################################################################################################
+#####################################################################################################################
+#####################################################################################################################
+
+class WorkerHeartbeatEvent(Event):
+    
+    def __init__(self,simulation):
+        self.simulation = simulation
+
+    def run(self, current_time):
+        new_events = []
+        if(HEARTBEAT_DELAY == 0):
+            print current_time, " HEARTBEAT_EVENT!! pointing to exact cluster status"
+            self.simulation.shared_cluster_status = self.simulation.cluster_status_keeper.get_queue_status()
+        else:
+            print current_time, " HEARTBEAT_EVENT!! making a deepcopy cluster status"
+            self.simulation.shared_cluster_status = copy.deepcopy(self.simulation.cluster_status_keeper.get_queue_status()) 
+     
+        if(HEARTBEAT_DELAY != 0): 
+            if(self.simulation.jobs_completed != self.simulation.jobs_scheduled or self.simulation.scheduled_last_job == False):
+                new_events.append((current_time + HEARTBEAT_DELAY,self))
         return new_events
 
 
@@ -233,16 +268,16 @@ class ClusterStatusKeeper():
 
     def update_workers_queue(self, worker_indices, increase, duration):
         for worker in worker_indices:
-           queue = self.worker_queues[worker]
-           if increase:
+            queue = self.worker_queues[worker]
+            if increase:
                 queue += duration
                 self.btmap.set(worker) 
-           else:
+            else:
                 queue -= duration
                 if(queue == 0):
                     self.btmap.flip(worker) 
-           assert queue >= 0
-           self.worker_queues[worker] = queue
+            assert queue >= 0, (" offending value for queue: %r %i " % (queue,worker))
+            self.worker_queues[worker] = queue
 
 #####################################################################################################################
 #####################################################################################################################
@@ -414,8 +449,8 @@ class Worker(object):
     #Worker class
     def get_probes_random(self, current_time, free_worker_id):
         probes_to_give = []
-        all_positions_of_short_tasks=[]
-        randomly_chosen_short_task_positions=[]
+        all_positions_of_short_tasks = []
+        randomly_chosen_short_task_positions = []
         i=0
 
         #record the ids (in queued_probes) of the queued short tasks
@@ -461,9 +496,9 @@ class Worker(object):
             self.tstamp_start_crt_big_task  = current_time
             self.estruntime_crt_task        = estimated_task_duration
         else:
-            self.tstamp_start_crt_big_task=-1
-            if (self.queued_probes[0][2]==True):
-               stats.STATS_SH_WAITED_FOR_BIG+=1
+            self.tstamp_start_crt_big_task = -1
+            if (self.queued_probes[0][2] == True):
+               stats.STATS_SH_WAITED_FOR_BIG += 1
 
         self.queued_probes              =   self.queued_probes[1:]
         return self.simulation.get_task(job_id, self, current_time)
@@ -491,6 +526,7 @@ class Simulation(object):
         self.off_mean_bottom = off_mean_bottom
         self.off_mean_top = off_mean_top
         self.ESTIMATION = ESTIMATION
+        self.shared_cluster_status = {}
 
         print "self.index_last_worker_of_small_partition:         ", self.index_last_worker_of_small_partition
         print "self.index_first_worker_of_big_partition:          ", self.index_first_worker_of_big_partition
@@ -501,15 +537,15 @@ class Simulation(object):
 
         self.small_partition_workers = self.worker_indices[:self.index_last_worker_of_small_partition+1]    # so not including the worker after :
         for node in self.small_partition_workers:
-            self.small_partition_workers_hash[node]=1
+            self.small_partition_workers_hash[node] = 1
 
         self.big_partition_workers = self.worker_indices[self.index_first_worker_of_big_partition:]         # so including the worker before :
         for node in self.big_partition_workers:
-            self.big_partition_workers_hash[node]=1
+            self.big_partition_workers_hash[node] = 1
 
-        self.small_not_big_partition_workers=self.worker_indices[:self.index_first_worker_of_big_partition]  # so not including the worker after: 
+        self.small_not_big_partition_workers = self.worker_indices[:self.index_first_worker_of_big_partition]  # so not including the worker after: 
         for node in self.small_not_big_partition_workers:
-            self.small_not_big_partition_workers_hash[node]=1
+            self.small_not_big_partition_workers_hash[node] = 1
 
         print "Size of self.small_partition_workers_hash:         ", len(self.small_partition_workers_hash)
         print "Size of self.big_partition_workers_hash:           ", len(self.big_partition_workers_hash)
@@ -519,6 +555,10 @@ class Simulation(object):
         self.free_slots_small_partition = len(self.small_partition_workers)
         self.free_slots_big_partition = len(self.big_partition_workers)
         self.free_slots_small_not_big_partition = len(self.small_not_big_partition_workers)
+ 
+        self.jobs_scheduled = 0
+        self.jobs_completed = 0
+        self.scheduled_last_job = False
 
         self.cluster_status_keeper = ClusterStatusKeeper()
         self.stealing_allowed = stealing_allowed
@@ -530,12 +570,12 @@ class Simulation(object):
 
     #Simulation class
     def subtract_sets(self, set1, set2):
-        used={}
-        difference=[]
-        ctr_long=0
+        used = {}
+        difference = []
+        ctr_long = 0
 
         for item in set2:
-            used[item]=1
+            used[item] = 1
 
         for worker in set1:
             if not worker in set2:
@@ -546,66 +586,110 @@ class Simulation(object):
 
     #Simulation class
     def find_workers_random(self, probe_ratio, nr_tasks, possible_worker_indices):
-        chosen_worker_indices=[]
-        for it in range(0,probe_ratio*nr_tasks):
+        chosen_worker_indices = []
+        nr_probes = max(probe_ratio*nr_tasks,MIN_NR_PROBES)
+        for it in range(0,nr_probes):
             rnd_index = random.randint(0,len(possible_worker_indices)-1)
             chosen_worker_indices.append(possible_worker_indices[rnd_index])
         return chosen_worker_indices
 
 
     #Simulation class
-    def find_workers_long_job_prio(self, num_tasks, estimated_task_duration, workers_queue_status,current_time,simulation, hash_workers_considered):
+    def find_workers_long_job_prio(self, num_tasks, estimated_task_duration, workers_queue_status, current_time, simulation, hash_workers_considered):
 
-        chosen_worker_indices= []
+        chosen_worker_indices = []
         workers_needed = num_tasks
         prio_queue = Queue.PriorityQueue()
 
-        empty_nodes=[]  #performance optimization
+        empty_nodes = []  #performance optimization
         for index in hash_workers_considered:
             qlen          = workers_queue_status[index]                
             worker_obj    = simulation.workers[index]
             worker_id     = index
 
-            start_of_crt_big_task = worker_obj.tstamp_start_crt_big_task
-            assert(current_time >= start_of_crt_big_task)
-            adjusted_waiting_time=qlen
-
             if qlen == 0 :
                 empty_nodes.append(worker_id)
-                if(len(empty_nodes)==workers_needed):
+                if(len(empty_nodes) == workers_needed):
                     break
             else: 
-                if(start_of_crt_big_task != -1):
-                    executed_so_far=current_time-start_of_crt_big_task
-                    estimated_crt_task=worker_obj.estruntime_crt_task
-                    adjusted_waiting_time=2*NETWORK_DELAY+qlen-min(executed_so_far,estimated_crt_task)
+                start_of_crt_big_task = worker_obj.tstamp_start_crt_big_task
+                assert(current_time >= start_of_crt_big_task)
+                adjusted_waiting_time = qlen
 
-                assert adjusted_waiting_time >=0                 
+                if(start_of_crt_big_task != -1):
+                    executed_so_far = current_time - start_of_crt_big_task
+                    estimated_crt_task = worker_obj.estruntime_crt_task
+                    adjusted_waiting_time = 2*NETWORK_DELAY + qlen - min(executed_so_far,estimated_crt_task)
+
+                assert adjusted_waiting_time >= 0, " offending value for adjusted_waiting_time: %r" % adjusted_waiting_time                 
                 prio_queue.put((adjusted_waiting_time,worker_id))
 
         #performance optimization 
         if(len(empty_nodes) == workers_needed):
             return empty_nodes
         else:
-            chosen_worker_indices=empty_nodes
+            chosen_worker_indices = empty_nodes
             for nodeid in chosen_worker_indices:
-                prio_queue.put((estimated_task_duration,nodeid))            
+                prio_queue.put((estimated_task_duration,nodeid))
 
         
-        queue_length,worker= prio_queue.get()
+        queue_length,worker = prio_queue.get()
         while (workers_needed > len(chosen_worker_indices)):
-
-            next_queue_length,next_worker=prio_queue.get()
-            while(queue_length<=next_queue_length and len(chosen_worker_indices) < workers_needed):
+            next_queue_length,next_worker = prio_queue.get()
+            while(queue_length <= next_queue_length and len(chosen_worker_indices) < workers_needed):
                 chosen_worker_indices.append(worker)
                 queue_length += estimated_task_duration
 
-            prio_queue.put((queue_length,worker));
-            queue_length=next_queue_length
+            prio_queue.put((queue_length,worker))
+            queue_length = next_queue_length
             worker = next_worker 
 
         assert workers_needed == len(chosen_worker_indices)
-        print chosen_worker_indices
+        return chosen_worker_indices
+
+    #Simulation class
+    def find_workers_dlwl(self,estimated_task_durations, workers_queue_status, current_time,simulation,hash_workers_considered):
+
+        chosen_worker_indices = []
+        workers_needed = len(estimated_task_durations)
+        prio_queue = Queue.PriorityQueue()
+
+        for index in hash_workers_considered:
+            qlen          = workers_queue_status[index]                
+            worker_obj    = simulation.workers[index]
+
+            adjusted_waiting_time = qlen
+            start_of_crt_big_task = worker_obj.tstamp_start_crt_big_task # PAMELA: it will always be considered big for DLWL
+            assert(current_time >= start_of_crt_big_task)
+
+            if(start_of_crt_big_task != -1):
+                executed_so_far = current_time - start_of_crt_big_task
+                estimated_crt_task = worker_obj.estruntime_crt_task
+                adjusted_waiting_time = max(2*NETWORK_DELAY + qlen - min(executed_so_far,estimated_crt_task),0)
+
+            rand_dlwl = random.randint(0, HEARTBEAT_DELAY)
+            adjusted_waiting_time += rand_dlwl
+            prio_queue.put((adjusted_waiting_time,index))
+
+        # For now all estimated task duration are the same , optimize performance
+        #copy_estimated_task_durations = list(estimated_task_durations)
+
+        queue_length,worker = prio_queue.get()
+        while (workers_needed > len(chosen_worker_indices)):
+
+            next_queue_length,next_worker = prio_queue.get()
+            assert queue_length >= 0
+            assert next_queue_length >= 0
+
+            while(queue_length <= next_queue_length and len(chosen_worker_indices) < workers_needed):
+                chosen_worker_indices.append(worker)
+                queue_length += estimated_task_durations[0] #copy_estimated_task_durations.pop(0)
+
+            prio_queue.put((queue_length,worker))
+            queue_length = next_queue_length
+            worker = next_worker 
+
+        assert workers_needed == len(chosen_worker_indices)
         return chosen_worker_indices
 
 
@@ -616,6 +700,8 @@ class Simulation(object):
         if SYSTEM_SIMULATED == "Eagle":
             return self.send_probes_eagle(job, current_time, worker_indices, btmap)
         if SYSTEM_SIMULATED == "LWL":
+            return self.send_probes_hawk(job, current_time, worker_indices, btmap)
+        if SYSTEM_SIMULATED == "DLWL":
             return self.send_probes_hawk(job, current_time, worker_indices, btmap)
 
 
@@ -655,9 +741,9 @@ class Simulation(object):
 
     #Simulation class
     def get_list_non_long_job_workers_from_btmap(self,btmap):
-        non_long_job_workers=[]
+        non_long_job_workers = []
             
-        non_long_job_workers=self.small_not_big_partition_workers[:]
+        non_long_job_workers = self.small_not_big_partition_workers[:]
 
         for index in self.big_partition_workers:
             if not btmap.test(index):
@@ -675,21 +761,21 @@ class Simulation(object):
                 job.probed_workers.add(worker_index)
 
         else:
-            missing_probes=len(worker_indices)
+            missing_probes = len(worker_indices)
             self.btmap_tstamp = -1
             self.btmap = None
-            ROUNDS_SCHEDULING=5       
+            ROUNDS_SCHEDULING = 5       
  
             for i in range(0,ROUNDS_SCHEDULING):
                 ok_nr, ok_nodes = self.try_round_of_probing(current_time,job,worker_indices,probe_events,i+1)  
                 missing_probes -= ok_nr
-                if(missing_probes==0):
+                if(missing_probes == 0):
                     return probe_events
                 
                 list_non_long_job_workers = self.get_list_non_long_job_workers_from_btmap(self.btmap)
                 worker_indices = self.find_workers_random(1, missing_probes, list_non_long_job_workers)
 
-            if(missing_probes>0):
+            if(missing_probes > 0):
                 worker_indices = self.find_workers_random(1, missing_probes, self.small_not_big_partition_workers)
                 self.try_round_of_probing(current_time,job,worker_indices,probe_events,ROUNDS_SCHEDULING+1)  
         
@@ -701,25 +787,25 @@ class Simulation(object):
     #bookkeeping for tracking the load
     def increase_free_slots_for_load_tracking(self, worker):
         self.total_free_slots += 1
-        if(worker.in_small):                self.free_slots_small_partition+=1
-        if(worker.in_big):                  self.free_slots_big_partition+=1
-        if(worker.in_small_not_big):        self.free_slots_small_not_big_partition+=1
+        if(worker.in_small):                self.free_slots_small_partition += 1
+        if(worker.in_big):                  self.free_slots_big_partition += 1
+        if(worker.in_small_not_big):        self.free_slots_small_not_big_partition += 1
 
 
     #Simulation class
     #bookkeeping for tracking the load
     def decrease_free_slots_for_load_tracking(self, worker):
         self.total_free_slots -= 1
-        if(worker.in_small):                self.free_slots_small_partition-=1
-        if(worker.in_big):                  self.free_slots_big_partition-=1
-        if(worker.in_small_not_big):        self.free_slots_small_not_big_partition-=1
+        if(worker.in_small):                self.free_slots_small_partition -= 1
+        if(worker.in_big):                  self.free_slots_big_partition -= 1
+        if(worker.in_small_not_big):        self.free_slots_small_not_big_partition -= 1
 
 
     #Simulation class
     def get_task(self, job_id, worker, current_time):
         job = self.jobs[job_id]
         #account for the fact that this is called when the probe is launched but it needs an RTT to talk to the scheduler
-        get_task_response_time = current_time + 2*NETWORK_DELAY
+        get_task_response_time = current_time + 2 * NETWORK_DELAY
         
         if len(job.unscheduled_tasks) == 0 :
             return [(get_task_response_time, NoopGetTaskResponseEvent(worker))]
@@ -727,10 +813,11 @@ class Simulation(object):
         events = []
         task_duration = job.unscheduled_tasks.pop()
         task_completion_time = task_duration + get_task_response_time
-        print current_time, " worker:",worker.id," task from job ",job_id," task duration: ",task_duration, " will finish at time ", task_completion_time
+        print current_time, " worker:", worker.id, " task from job ", job_id, " task duration: ", task_duration, " will finish at time ", task_completion_time
         is_job_complete = job.update_task_completion_details(task_completion_time)
 
         if is_job_complete:
+            self.jobs_completed += 1;
             print >> finished_file, task_completion_time," estimated_task_duration: ",job.estimated_task_duration, " by_def: ",job.job_type_for_comparison, " total_job_running_time: ",(job.end_time - job.start_time)
 
         events.append((task_completion_time, TaskEndEvent(worker, self.SCHEDULE_BIG_CENTRALIZED, self.cluster_status_keeper, job.id, job.estimated_task_duration, task_duration, (len(job.unscheduled_tasks) == 0), self)))
@@ -770,9 +857,14 @@ class Simulation(object):
             assert(self.off_mean_top > 0)
             assert(self.off_mean_top>self.off_mean_bottom)
 
+        if(SYSTEM_SIMULATED == "DLWL"):
+            self.shared_cluster_status = self.cluster_status_keeper.get_queue_status()
+            self.event_queue.put((0, WorkerHeartbeatEvent(self)))
+
         line = self.jobs_file.readline()
         new_job = Job(self.task_distribution, line, estimate_distribution, self.off_mean_bottom, self.off_mean_top)
         self.event_queue.put((float(line.split()[0]), JobArrival(self, self.task_distribution, new_job, self.jobs_file)))
+        self.jobs_scheduled = 1
         self.event_queue.put((float(line.split()[0]), PeriodicTimerEvent(self)))
 
         while (not self.event_queue.empty()):
@@ -797,9 +889,9 @@ NETWORK_DELAY = 0.0005
 BIG=1
 SMALL=0
 
-job_start_tstamps={}
+job_start_tstamps = {}
 
-if(len(sys.argv)!=19):
+if(len(sys.argv) != 20):
     print "Incorrent number of parameters."
     sys.exit(1)
 
@@ -821,15 +913,18 @@ STEALING_STRATEGY               = sys.argv[14]
 STEALING_LIMIT                  = int(sys.argv[15])         #cap on the nr of tasks to steal from one node
 STEALING_ATTEMPTS               = int(sys.argv[16])         #cap on the nr of nodes to contact for stealing
 TOTAL_WORKERS                   = int(sys.argv[17])
-SYSTEM_SIMULATED                = sys.argv[18]  
+HEARTBEAT_DELAY                 = int(sys.argv[18])
+SYSTEM_SIMULATED                = sys.argv[19]  
 
-t1=time.time()
+MIN_NR_PROBES = 20 #1/100*TOTAL_WORKERS
+
+t1 = time.time()
 
 stats = Stats()
 s = Simulation(MONITOR_INTERVAL, stealing, SCHEDULE_BIG_CENTRALIZED, WORKLOAD_FILE,CUTOFF_THIS_EXP,CUTOFF_BIG_SMALL,ESTIMATION,OFF_MEAN_BOTTOM,OFF_MEAN_TOP,TOTAL_WORKERS)
 s.run()
 
-print "Simulation ended in ", (time.time()-t1), " s "
+print "Simulation ended in ", (time.time() - t1), " s "
 
 finished_file.close()
 load_file.close()
