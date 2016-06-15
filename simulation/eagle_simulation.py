@@ -244,6 +244,7 @@ class WorkerHeartbeatEvent(Event):
         if(HEARTBEAT_DELAY != 0): 
             if(self.simulation.jobs_completed != self.simulation.jobs_scheduled or self.simulation.scheduled_last_job == False):
                 new_events.append((current_time + HEARTBEAT_DELAY,self))
+
         return new_events
 
 
@@ -309,6 +310,7 @@ class UpdateRemainingTimeEvent(Event):
         self.job = job
 
     def run(self, current_time):
+        assert( len(self.job.unscheduled_tasks)>=0)
         self.job.update_remaining_time()
         return []
 
@@ -437,7 +439,7 @@ class Worker(object):
             stats.STATS_STEALING_MESSAGES += ctr_it
 
         for job_id, task_length, behind_big, cum, sticky in new_probes:
-            assert (task_length <= CUTOFF_THIS_EXP), " task_length: %r, CUTOFF_THIS_EXP %r " % (task_length,CUTOFF_THIS_EXP) # TODO change to job_type_for_scheduling for misestimation
+            assert (self.simulation.jobs[job_id].job_type_for_comparison != BIG)
             new_events.extend(self.add_probe(job_id, task_length, SMALL, current_time, None))
 
         return new_events
@@ -452,22 +454,30 @@ class Worker(object):
         skipped_small = 0
         skipped_big = 0
 
+        big_job = self.simulation.jobs[self.queued_probes[i][0]].job_type_for_comparison == BIG
+
         if not self.executing_big:
-            while (i < len(self.queued_probes) and self.queued_probes[i][1] <= CUTOFF_THIS_EXP):
+            while (i < len(self.queued_probes) and not big_job): #self.queued_probes[i][1] <= CUTOFF_THIS_EXP):
                 i += 1
+
+                big_job = self.simulation.jobs[self.queued_probes[i][0]].job_type_for_scheduling == BIG
+
         skipped_short = i
 
-        while (i < len(self.queued_probes) and self.queued_probes[i][1] > CUTOFF_THIS_EXP):
+        while (i < len(self.queued_probes) and big_job): #self.queued_probes[i][1] > CUTOFF_THIS_EXP):
             i += 1
+            big_job = self.simulation.jobs[self.queued_probes[i][0]].job_type_for_scheduling == BIG
+
         skipped_big = i - skipped_short
 
         total_time_probes = 0
 
         nr_short_chosen = 0
         if (i < len(self.queued_probes)):
-            while (len(self.queued_probes) > i and self.queued_probes[i][1] <= CUTOFF_THIS_EXP and nr_short_chosen < STEALING_LIMIT):
+            while (len(self.queued_probes) > i and not big_job and nr_short_chosen < STEALING_LIMIT):
                 nr_short_chosen += 1
                 probes_to_give.append(self.queued_probes.pop(i))
+                big_job = self.simulation.jobs[self.queued_probes[i][0]].job_type_for_scheduling == BIG
                 total_time_probes += probes_to_give[-1][1]
 
         return probes_to_give
@@ -483,7 +493,8 @@ class Worker(object):
 
         #record the ids (in queued_probes) of the queued short tasks
         while (i < len(self.queued_probes)):
-            if(self.queued_probes[i][1] <= CUTOFF_THIS_EXP):
+            big_job = self.simulation.jobs[self.queued_probes[i][0]].job_type_for_scheduling == BIG
+            if (not big_job): #self.queued_probes[i][1] <= CUTOFF_THIS_EXP):
                 all_positions_of_short_tasks.append(i)
             i += 1
 
@@ -662,6 +673,7 @@ class Worker(object):
         for position_it in range(0,len(self.queued_probes)):
             job_id    = self.queued_probes[position_it][0]
             remaining = self.get_remaining_exec_time_for_job(job_id, current_time)
+            assert(remaining >= 0)
 
             estimated_task_duration = self.simulation.jobs[job_id].estimated_task_duration
 
@@ -1019,7 +1031,9 @@ class Simulation(object):
             print >> finished_file, task_completion_time," estimated_task_duration: ",job.estimated_task_duration, " by_def: ",job.job_type_for_comparison, " total_job_running_time: ",(job.end_time - job.start_time)
 
         events.append((task_completion_time, TaskEndEvent(worker, self.SCHEDULE_BIG_CENTRALIZED, self.cluster_status_keeper, job.id, job.job_type_for_scheduling, job.estimated_task_duration, this_task_id)))
-        events.append((current_time + 2*NETWORK_DELAY, UpdateRemainingTimeEvent(job)))
+        
+        if SRPT_ENABLED and SYSTEM_SIMULATED == "Eagle":
+                events.append((current_time + 2*NETWORK_DELAY, UpdateRemainingTimeEvent(job)))
 
         if len(job.unscheduled_tasks) == 0:
             logging.info("Finished scheduling tasks for job %s" % job.id)
