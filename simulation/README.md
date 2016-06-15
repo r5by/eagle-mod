@@ -40,11 +40,13 @@ The simulator allows you to simulate the behavior of the following systems:
 - DLWL		(a Distributed version of LWL, shared state based on Heartbeats)
 
 
-The simulator takes a number of parameters:
+The simulator takes a number of parameters:<br />
+
 1. path to input trace (e.g. /media/hdd/traces/GOOG.tr)<br />
    This is the input trace that will be simulated<br />
    The trace format is:
    >job_submission_time     nr_of_tasks_in_job   average_task_duration   the_runtime_of_each_task
+
    For example:
    >10   3   20   10 20 30
 
