@@ -9,11 +9,12 @@ Prerequisites:
   
 - You also need to install in pypy/python a package that enables bitmap support.
   Here are the steps to do that, applied to pypy:
-  1) cd to your pypy directory
-  2) wget https://pypi.python.org/packages/source/b/bitmap/bitmap-0.0.5.tar.gz#md5=24df0ef3578323744103e279bbcfe48b 
-  3) tar xzvf bitmap-0.0.05.tar.gz
-  4) cd bitmap-0.0.5
-  5) ../bin/pypy setup.py install
+
+  1. cd to your pypy directory
+  2. wget https://pypi.python.org/packages/source/b/bitmap/bitmap-0.0.5.tar.gz#md5=24df0ef3578323744103e279bbcfe48b 
+  3. tar xzvf bitmap-0.0.05.tar.gz
+  4. cd bitmap-0.0.5
+  5. ../bin/pypy setup.py install
 
 - It is better to run the simulator on machines with a good amount of RAM.
   In extreme cases where a lot of workers are simulated the memory utilization can reach a few GB.
