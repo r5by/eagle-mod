@@ -454,19 +454,14 @@ class Worker(object):
         skipped_small = 0
         skipped_big = 0
 
-        big_job = self.simulation.jobs[self.queued_probes[i][0]].job_type_for_comparison == BIG
-
         if not self.executing_big:
-            while (i < len(self.queued_probes) and not big_job): #self.queued_probes[i][1] <= CUTOFF_THIS_EXP):
+            while (i < len(self.queued_probes) and self.simulation.jobs[self.queued_probes[i][0]].job_type_for_comparison != BIG): #self.queued_probes[i][1] <= CUTOFF_THIS_EXP):
                 i += 1
-
-                big_job = self.simulation.jobs[self.queued_probes[i][0]].job_type_for_scheduling == BIG
 
         skipped_short = i
 
-        while (i < len(self.queued_probes) and big_job): #self.queued_probes[i][1] > CUTOFF_THIS_EXP):
+        while (i < len(self.queued_probes) and self.simulation.jobs[self.queued_probes[i][0]].job_type_for_comparison == BIG): #self.queued_probes[i][1] > CUTOFF_THIS_EXP):
             i += 1
-            big_job = self.simulation.jobs[self.queued_probes[i][0]].job_type_for_scheduling == BIG
 
         skipped_big = i - skipped_short
 
@@ -474,10 +469,9 @@ class Worker(object):
 
         nr_short_chosen = 0
         if (i < len(self.queued_probes)):
-            while (len(self.queued_probes) > i and not big_job and nr_short_chosen < STEALING_LIMIT):
+            while (len(self.queued_probes) > i and self.simulation.jobs[self.queued_probes[i][0]].job_type_for_scheduling != BIG and nr_short_chosen < STEALING_LIMIT):
                 nr_short_chosen += 1
                 probes_to_give.append(self.queued_probes.pop(i))
-                big_job = self.simulation.jobs[self.queued_probes[i][0]].job_type_for_scheduling == BIG
                 total_time_probes += probes_to_give[-1][1]
 
         return probes_to_give
