@@ -126,35 +126,43 @@ The simulator takes a number of parameters:<br />
 19. heartbeat delay (integer)<br />
     For DLWL system. The time interval at which a snapshot of the cluster status is saved (stale version of workers wait time).
 
-20. system simulated (possible values, Hawk, Eagle, IdealEagle, LWL, DLWL)<br />
-    The letter case matters.
+20. the minimum number of probes to send for a job <br />
+    By default, Sparrow sends 2*T probes, where T is the number of tasks in a job.
+    
+21. Whether SBP (Sticky Batch Probing) is used or not (yes/no) <br />
+
+22. Choose which system to simulate (possible values, Hawk, Eagle, IdealEagle, CLWL, DLWL)<br />
+    The system name is case sensitive !
+
+<br />
+
 
 ### Example parameter settings:
 
 This simulates Hawk on the Yahoo trace, with 4000 slots (0 to 3999).<br />
 Short tasks are scheduled over slots 0 to 4000 while long task are only scheduled over slots 800 to 3999.
->/media/hdd/HawkEagle/traces2/YH.tr yes yes 90.5811 90.5811 100 98 1 2 5 MEAN 0 0 ATC 10000 10 4000 no 0 Hawk
+>/media/hdd/HawkEagle/traces2/YH.tr yes yes 90.5811 90.5811 100 98 1 2 5 MEAN 0 0 ATC 10000 10 4000 no 0 2 no Hawk
 
 This simulates Sparrow on the Yahoo trace.<br />
 Yes, the simulated system is still Hawk but notice the change in parameters that make it behave like Sparrow
->/media/hdd/HawkEagle/traces2/YH.tr no no 90.5811 90.5811 100 100 1 2 5 MEAN 0 0 ATC 10000 10 4000 no 0 Hawk
+>/media/hdd/HawkEagle/traces2/YH.tr no no 90.5811 90.5811 100 100 1 2 5 MEAN 0 0 ATC 10000 10 4000 no 0 2 no Hawk
 
 This simulates Eagle on the Yahoo trace.
->/media/hdd/HawkEagle/traces2/YH.tr no yes 90.5811 90.5811 100 98 1 2 5 MEAN 0 0 ATC 10000 10 4000 yes 0 Eagle
+>/media/hdd/HawkEagle/traces2/YH.tr no yes 90.5811 90.5811 100 98 1 2 5 MEAN 0 0 ATC 10000 10 4000 yes 0 20 yes Eagle
 
 This simulates IdealEagle on the Yahoo trace.
->/media/hdd/HawkEagle/traces2/YH.tr no yes 90.5811 90.5811 100 98 1 2 5 MEAN 0 0 ATC 10000 10 4000 no 0 IdealEagle
+>/media/hdd/HawkEagle/traces2/YH.tr no yes 90.5811 90.5811 100 98 1 2 5 MEAN 0 0 ATC 10000 10 4000 no 0 20 yes IdealEagle
 
 This simulates LWL (with partitioning) on the Yahoo trace.
->/media/hdd/HawkEagle/traces2/YH.tr no yes -1 90.5811 100 98 1 2 5 MEAN 0 0 ATC 10000 10 4000 no 0 LWL
+>/media/hdd/HawkEagle/traces2/YH.tr no yes -1 90.5811 100 98 1 2 5 MEAN 0 0 ATC 10000 10 4000 no 0 2 no CLWL
 
 This simulates DLWL (with partitioning and SRPT) on the Yahoo trace.
->/media/hdd/HawkEagle/traces2/YH.tr no yes -1 90.5811 100 98 1 2 5 MEAN 0 0 ATC 10000 10 4000 yes 8 DLWL
+>/media/hdd/HawkEagle/traces2/YH.tr no yes -1 90.5811 100 98 1 2 5 MEAN 0 0 ATC 10000 10 4000 yes 8 2 no DLWL
 
 Partitioning and cutoff parameters for the various traces:
 *    GOOG 	cutoff: 1129.532	small partition, big partition: 100, 83
 *    CCc 	cutoff: 272.7830	small partition, big partition: 100, 91
-*    YH 		cutoff: 90.5811		small partition, big partition: 100, 98
+*    YH 	cutoff: 90.5811		small partition, big partition: 100, 98
 *    FB		cutoff: 76.5951		small partition, big partition: 100, 98
 
 ---

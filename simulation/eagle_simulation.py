@@ -114,13 +114,29 @@ class Job(object):
 class Stats(object):
 
     STATS_STEALING_MESSAGES = 0
-    STATS_SH_QUEUED_BEHIND_BIG = 0
-    STATS_SH_EXEC_IN_BP = 0
-    STATS_TOTAL_STOLEN_TASKS = 0
+    STATS_SH_PROBES_QUEUED_BEHIND_BIG = 0
+    STATS_TASKS_SH_EXEC_IN_BP = 0
+    STATS_TOTAL_STOLEN_PROBES = 0
+    STATS_TOTAL_STOLEN_B_FROM_B_PROBES = 0
+    STATS_TOTAL_STOLEN_S_FROM_S_PROBES = 0
+    STATS_TOTAL_STOLEN_S_FROM_B_PROBES = 0
     STATS_SUCCESSFUL_STEAL_ATTEMPTS = 0
-    STATS_SH_WAITED_FOR_BIG = 0
-    STATS_STICKY_PROBES = 0
-    
+    STATS_SHORT_TASKS_WAITED_FOR_BIG = 0
+    STATS_STICKY_EXECUTIONS = 0
+    STATS_STICKY_EXECUTIONS_IN_BP = 0
+    STATS_REASSIGNED_PROBES=0
+    STATS_TASKS_TOTAL_FINISHED = 0   
+    STATS_TASKS_SHORT_FINISHED = 0   
+    STATS_TASKS_LONG_FINISHED = 0   
+    STATS_SHORT_UNSUCC_PROBES_IN_BIG = 0
+    STATS_SH_PROBES_ASSIGNED_IN_BP = 0
+    STATS_BYPASSEDBYBIG_AND_STUCK = 0
+    STATS_FALLBACKS_TO_SP = 0
+    STATS_RND_FIRST_ROUND_NO_LOCAL_BITMAP = 0
+    STATS_ROUNDS = 0
+    STATS_ROUNDS_ATTEMPTS = 0
+    STATS_PERC_1ST_ROUNDS = 0
+
 #####################################################################################################################
 #####################################################################################################################
 class Event(object):
@@ -152,12 +168,16 @@ class JobArrival(Event, file):
         if not long_job:
             print current_time, ": Short Job arrived!!", self.job.id, " num tasks ", self.job.num_tasks, " estimated_duration ", self.job.estimated_task_duration
 
+            
+            rnd_worker_in_big_partition = random.randint(self.simulation.index_first_worker_of_big_partition, len(self.simulation.workers)-1)
+            self.simulation.hash_jobid_to_node[self.job.id]=rnd_worker_in_big_partition
+
             if SYSTEM_SIMULATED == "Hawk" or SYSTEM_SIMULATED == "Eagle":
                 possible_worker_indices = self.simulation.small_partition_workers
             if SYSTEM_SIMULATED == "IdealEagle":
                 possible_worker_indices = self.simulation.get_list_non_long_job_workers_from_btmap(self.simulation.cluster_status_keeper.get_btmap())
 
-            worker_indices = self.simulation.find_workers_random(PROBE_RATIO, self.job.num_tasks, possible_worker_indices)
+            worker_indices = self.simulation.find_workers_random(PROBE_RATIO, self.job.num_tasks, possible_worker_indices,MIN_NR_PROBES)
 
         else:
             print current_time, ":   Big Job arrived!!", self.job.id, " num tasks ", self.job.num_tasks, " estimated_duration ", self.job.estimated_task_duration
@@ -173,7 +193,7 @@ class JobArrival(Event, file):
                 self.simulation.cluster_status_keeper.update_workers_queue(worker_indices, True, self.job.estimated_task_duration)
             elif (self.simulation.SCHEDULE_BIG_CENTRALIZED):
                 workers_queue_status = self.simulation.cluster_status_keeper.get_queue_status()
-                if SYSTEM_SIMULATED == "LWL" and self.job.job_type_for_comparison == SMALL:
+                if SYSTEM_SIMULATED == "CLWL" and self.job.job_type_for_comparison == SMALL:
                     possible_workers = self.simulation.small_partition_workers_hash
                 else:
                     possible_workers = self.simulation.big_partition_workers_hash
@@ -181,7 +201,7 @@ class JobArrival(Event, file):
                 worker_indices = self.simulation.find_workers_long_job_prio(self.job.num_tasks, self.job.estimated_task_duration, workers_queue_status, current_time, self.simulation, possible_workers)
                 self.simulation.cluster_status_keeper.update_workers_queue(worker_indices, True, self.job.estimated_task_duration)
             else:
-                worker_indices = self.simulation.find_workers_random(PROBE_RATIO, self.job.num_tasks, self.simulation.big_partition_workers)
+                worker_indices = self.simulation.find_workers_random(PROBE_RATIO, self.job.num_tasks, self.simulation.big_partition_workers,MIN_NR_PROBES)
 
         Job.per_job_task_info[self.job.id] = {}
         for tasknr in range(0,self.job.num_tasks):
@@ -260,7 +280,7 @@ class ProbeEvent(Event):
         self.btmap = btmap
 
     def run(self, current_time):
-        return self.worker.add_probe(self.job_id, self.task_length, self.job_type_for_scheduling, current_time,self.btmap)
+        return self.worker.add_probe(self.job_id, self.task_length, self.job_type_for_scheduling, current_time,self.btmap, False)
 
 #####################################################################################################################
 #####################################################################################################################
@@ -329,16 +349,19 @@ class TaskEndEvent():
 
     def run(self, current_time):
         global stats
+        stats.STATS_TASKS_TOTAL_FINISHED += 1
         if(self.job_type_for_scheduling != BIG):
+            stats.STATS_TASKS_SHORT_FINISHED += 1
             if(self.worker.in_big):
-                stats.STATS_SH_EXEC_IN_BP += 1
+                stats.STATS_TASKS_SH_EXEC_IN_BP += 1
 
         elif (self.SCHEDULE_BIG_CENTRALIZED):
             self.status_keeper.update_workers_queue([self.worker.id], False, self.estimated_task_duration)
 
+        if(self.job_type_for_scheduling == BIG):
+            stats.STATS_TASKS_LONG_FINISHED += 1
+
         del Job.per_job_task_info[self.job_id][self.this_task_id]
-        #if(len(Job.per_job_task_info[self.job_id])==0):
-         #   del Job.per_job_task_info[self.job_id]
             
 
         self.worker.tstamp_start_crt_big_task =- 1
@@ -379,14 +402,17 @@ class Worker(object):
 
 
     #Worker class
-    def add_probe(self, job_id, task_length, job_type_for_scheduling, current_time, btmap):
+    def add_probe(self, job_id, task_length, job_type_for_scheduling, current_time, btmap, handle_stealing):
         global stats
 
         long_job = job_type_for_scheduling == BIG
-        if (not long_job and (self.executing_big == True or self.queued_big > 0)):
-            stats.STATS_SH_QUEUED_BEHIND_BIG += 1        
+        if (not long_job and handle_stealing == False and (self.executing_big == True or self.queued_big > 0)):
+            stats.STATS_SH_PROBES_QUEUED_BEHIND_BIG += 1        
+    
+        if (not long_job and handle_stealing == False and  self.in_big):        
+            stats.STATS_SH_PROBES_ASSIGNED_IN_BP +=1
 
-        self.queued_probes.append([job_id,task_length,(self.executing_big == True or self.queued_big > 0), 0, False])
+        self.queued_probes.append([job_id,task_length,(self.executing_big == True or self.queued_big > 0), 0, False,-1])
 
         if (long_job):
             self.queued_big     = self.queued_big + 1
@@ -431,16 +457,25 @@ class Worker(object):
 
         if(from_worker!=-1 and len(new_probes)!= 0):
             print current_time, ": Worker ", self.id," Stealing: ", len(new_probes), " from: ",from_worker, " attempts: ",ctr_it
+            from_worker_obj=self.simulation.workers[from_worker]
+            if(from_worker_obj.in_big and self.in_big):
+                stats.STATS_TOTAL_STOLEN_B_FROM_B_PROBES          += len(new_probes)
+            if(from_worker_obj.in_big and not self.in_big):
+                stats.STATS_TOTAL_STOLEN_S_FROM_B_PROBES          += len(new_probes)
+            if(not from_worker_obj.in_big and not self.in_big):
+                stats.STATS_TOTAL_STOLEN_S_FROM_S_PROBES          += len(new_probes)
+                 
+
             stats.STATS_STEALING_MESSAGES           += ctr_it
-            stats.STATS_TOTAL_STOLEN_TASKS          += len(new_probes)
+            stats.STATS_TOTAL_STOLEN_PROBES          += len(new_probes)
             stats.STATS_SUCCESSFUL_STEAL_ATTEMPTS   += 1
         else:
             print current_time, ": Worker ", self.id," failed to steal. attempts: ",ctr_it
             stats.STATS_STEALING_MESSAGES += ctr_it
 
-        for job_id, task_length, behind_big, cum, sticky in new_probes:
+        for job_id, task_length, behind_big, cum, sticky, handle_steal in new_probes:
             assert (self.simulation.jobs[job_id].job_type_for_comparison != BIG)
-            new_events.extend(self.add_probe(job_id, task_length, SMALL, current_time, None))
+            new_events.extend(self.add_probe(job_id, task_length, SMALL, current_time, None,True))
 
         return new_events
 
@@ -521,7 +556,7 @@ class Worker(object):
         self.simulation.decrease_free_slots_for_load_tracking(self)
         
         if (SRPT_ENABLED):
-            if (SYSTEM_SIMULATED == "Eagle"):
+            if (SYSTEM_SIMULATED == "Eagle" or SYSTEM_SIMULATED == "Hawk"):
                 pos = self.get_next_probe_acc_to_sbp_srpt(current_time)
                 if (pos == -1):
                     assert (len(self.queued_probes) == 0)
@@ -542,16 +577,37 @@ class Worker(object):
             self.estruntime_crt_task        = estimated_task_duration
         else:
             self.tstamp_start_crt_big_task = -1
-            if (self.queued_probes[0][2] == True):
-               stats.STATS_SH_WAITED_FOR_BIG += 1
 
         was_successful, events = self.simulation.get_task(job_id, self, current_time)
-        if (SYSTEM_SIMULATED != "Eagle" or not SRPT_ENABLED):
+        job_bydef_big = (self.simulation.jobs[job_id].job_type_for_comparison == BIG)
+       
+        if(not job_bydef_big and self.queued_probes[0][5] == 1 and self.in_big and was_successful):
+            stats.STATS_BYPASSEDBYBIG_AND_STUCK+=1 
+
+        if(not job_bydef_big and self.queued_probes[0][2] == True and self.in_big and was_successful):
+               stats.STATS_SHORT_TASKS_WAITED_FOR_BIG += 1
+               self.simulation.jobs_affected_by_holb[job_id]=1
+                   
+ 
+        if(not job_bydef_big and not was_successful and self.in_big):
+                stats.STATS_SHORT_UNSUCC_PROBES_IN_BIG +=1
+
+        if(SBP_ENABLED==True and was_successful and not job_bydef_big):
+            if(self.queued_probes[pos][4]):
+            	stats.STATS_STICKY_EXECUTIONS += 1
+                if(self.in_big):
+                    stats.STATS_STICKY_EXECUTIONS_IN_BP +=1
+            self.queued_probes[pos][4] = True
+    
+        if(SBP_ENABLED==False or not was_successful or job_bydef_big):
+            #so the probe remains if SBP is on, was succesful and is small        
             self.queued_probes.pop(pos)
-        else:
-            job_bydef_big = (self.simulation.jobs[job_id].job_type_for_comparison == BIG)
-            if(not was_successful or job_bydef_big):
-                self.queued_probes.pop(pos)
+
+        if(SRPT_ENABLED==True and (SYSTEM_SIMULATED=="Eagle" or SYSTEM_SIMULATED=="Hawk")):
+            if(was_successful and job_bydef_big):
+                for delay_it in range(0,pos):
+                    self.queued_probes[delay_it][5]=1
+
             if(was_successful and not job_bydef_big):
                 # Add estimated_delay to probes in front
                 for delay_it in range(0,pos):
@@ -560,20 +616,18 @@ class Worker(object):
                     self.queued_probes[delay_it][3] = new_acc_delay
 
                     #Debug
-                    job_bydef_big = self.simulation.jobs[job_id].job_type_for_comparison == BIG
-                    assert(not job_bydef_big)
-                    task_duration = self.simulation.jobs[job_id].estimated_task_duration
-                    if (CAP_SRPT_SBP != float('inf')):
-                        assert(new_acc_delay <= CAP_SRPT_SBP * task_duration), " Chosen position: %r, length %r , offending  %r" % (pos,len(self.queued_probes), new_acc_delay)
-                    else:
-                        assert(new_acc_delay <= CAP_SRPT_SBP and new_acc_delay >= 0), " Chosen position: %r, length %r , offending  %r" % (pos,len(self.queued_probes), new_acc_delay)
+                    if(SYSTEM_SIMULATED=="Eagle"):
+                        job_bydef_big = self.simulation.jobs[job_id].job_type_for_comparison == BIG
+                        assert(not job_bydef_big)
+                        task_duration = self.simulation.jobs[job_id].estimated_task_duration
+                        if (CAP_SRPT_SBP != float('inf')):
+                            assert(new_acc_delay <= CAP_SRPT_SBP * task_duration), " Chosen position: %r, length %r , offending  %r" % (pos,len(self.queued_probes), new_acc_delay)
+                        else:
+                            assert(new_acc_delay <= CAP_SRPT_SBP and new_acc_delay >= 0), " Chosen position: %r, length %r , offending  %r" % (pos,len(self.queued_probes), new_acc_delay)
 
-                if(self.queued_probes[pos][4]):
-                    stats.STATS_STICKY_PROBES += 1
-
-                self.queued_probes[pos][4] = True
 
         return events
+
 
     #Worker class
     def get_remaining_exec_time_for_job_alt(self, job_id, current_time):
@@ -626,7 +680,7 @@ class Worker(object):
                 estimated_task_duration = self.simulation.jobs[job_id].estimated_task_duration
 
                 jump_ok = False
-                if(job_bydef_big):
+                if(job_bydef_big and position_it == 0):
                     jump_ok = True
                     chosen_is_big = True
                 elif(remaining < min_remaining_exec_time):
@@ -680,29 +734,15 @@ class Worker(object):
 
             # calculate shortest slack for next probes
             if (CAP_SRPT_SBP != float('inf')):
-                #if(CAP_SRPT_SBP == 0):
-                #    assert(self.queued_probes[position_it][3]==0)
                 slack = CAP_SRPT_SBP*estimated_task_duration - self.queued_probes[position_it][3] # will be negative is estimated_task_duration = 0
-                #assert (slack>=0), " offending value slack: %r CAP %r" % (slack, CAP_SRPT_SBP)
                 if(slack < shortest_slack_in_front): #improvement: if its 0, no task will be allowed to bypass it
                     shortest_slack_in_front = slack
 
-
         assert(position_in_queue >= 0)
-        #if(CAP_SRPT_SBP == 0):
-        #    assert(position_in_queue==0), " offending value position_in_queue %r position_it %r" % (position_in_queue, position_it)
         # Add estimated_delay to probes in front        
         for delay_it in range(0,position_in_queue):
             new_acc_delay = self.queued_probes[delay_it][3] + estimated_delay            
             self.queued_probes[delay_it][3] = new_acc_delay
-
-            #Debug
-            #job_id        = self.queued_probes[delay_it][0]
-            #task_duration = self.simulation.jobs[job_id].estimated_task_duration
-            #if (CAP_SRPT_SBP != float('inf')):
-            #    assert(new_acc_delay<=CAP_SRPT_SBP*task_duration), " Chosen position: %r , offending  %r" % (position_in_queue, new_acc_delay)
-            #else:
-            #    assert(new_acc_delay<=CAP_SRPT_SBP and new_acc_delay>=0), " Chosen position: %r , offending  %r" % (position_in_queue, new_acc_delay)
 
         return position_in_queue
 
@@ -769,6 +809,9 @@ class Simulation(object):
         self.btmap_tstamp = -1
         self.clusterstatus_from_btmap = None
 
+        self.hash_jobid_to_node = {}
+        self.btmap = None
+        self.jobs_affected_by_holb={}  
 
     #Simulation class
     def subtract_sets(self, set1, set2):
@@ -787,9 +830,9 @@ class Simulation(object):
 
 
     #Simulation class
-    def find_workers_random(self, probe_ratio, nr_tasks, possible_worker_indices):
+    def find_workers_random(self, probe_ratio, nr_tasks, possible_worker_indices, min_probes):
         chosen_worker_indices = []
-        nr_probes = max(probe_ratio*nr_tasks,MIN_NR_PROBES)
+        nr_probes = max(probe_ratio*nr_tasks,min_probes)
         for it in range(0,nr_probes):
             rnd_index = random.randint(0,len(possible_worker_indices)-1)
             chosen_worker_indices.append(possible_worker_indices[rnd_index])
@@ -901,7 +944,7 @@ class Simulation(object):
             return self.send_probes_hawk(job, current_time, worker_indices, btmap)
         if SYSTEM_SIMULATED == "Eagle":
             return self.send_probes_eagle(job, current_time, worker_indices, btmap)
-        if SYSTEM_SIMULATED == "LWL":
+        if SYSTEM_SIMULATED == "CLWL":
             return self.send_probes_hawk(job, current_time, worker_indices, btmap)
         if SYSTEM_SIMULATED == "DLWL":
             return self.send_probes_hawk(job, current_time, worker_indices, btmap)
@@ -952,8 +995,18 @@ class Simulation(object):
                 non_long_job_workers.append(index)
         return non_long_job_workers
 
+
+    def get_list_non_long_job_workers_from_bp_from_btmap(self,btmap):
+        non_long_job_workers = []
+            
+        for index in self.big_partition_workers:
+            if not btmap.test(index):
+                non_long_job_workers.append(index)
+        return non_long_job_workers
+
     #Simulation class
     def send_probes_eagle(self, job, current_time, worker_indices, btmap):
+        global stats
         self.jobs[job.id] = job
         probe_events = []
 
@@ -966,20 +1019,49 @@ class Simulation(object):
             missing_probes = len(worker_indices)
             self.btmap_tstamp = -1
             self.btmap = None
-            ROUNDS_SCHEDULING = 5       
+            ROUNDS_SCHEDULING = 2 
+
+            #use local bitmap
+            #self.btmap        = self.workers[self.hash_jobid_to_node[job.id]].btmap
+            #self.btmap_tstamp = self.workers[self.hash_jobid_to_node[job.id]].btmap_tstamp
+            #ROUNDS_SCHEDULING = 2
+            
+            #if(self.btmap != None):
+             #   list_non_long_job_workers = self.get_list_non_long_job_workers_from_btmap(self.btmap)
+              #  worker_indices = self.find_workers_random(1, missing_probes, list_non_long_job_workers, 0)
+            #else:
+             #   stats.STATS_RND_FIRST_ROUND_NO_LOCAL_BITMAP +=1 
+
+             #small
+            #worker_indices = self.find_workers_random(PROBE_RATIO,job.num_tasks,self.big_partition_workers,MIN_NR_PROBES)
+
  
+            stats.STATS_ROUNDS_ATTEMPTS +=1
             for i in range(0,ROUNDS_SCHEDULING):
                 ok_nr, ok_nodes = self.try_round_of_probing(current_time,job,worker_indices,probe_events,i+1)  
+                if(i==0):
+                    stats.STATS_PERC_1ST_ROUNDS+=ok_nr*1.0/missing_probes
                 missing_probes -= ok_nr
+                stats.STATS_ROUNDS +=1
+                
+
                 if(missing_probes == 0):
                     return probe_events
-                
+ 
+                assert(missing_probes >= 0)               
+ 
                 list_non_long_job_workers = self.get_list_non_long_job_workers_from_btmap(self.btmap)
-                worker_indices = self.find_workers_random(1, missing_probes, list_non_long_job_workers)
+                #small
+                #list_non_long_job_workers = self.get_list_non_long_job_workers_from_bp_from_btmap(self.btmap)
+                #if(len(list_non_long_job_workers)==0):
+                 #   break
+                worker_indices = self.find_workers_random(1, missing_probes, list_non_long_job_workers,0)
+                stats.STATS_REASSIGNED_PROBES += missing_probes
 
             if(missing_probes > 0):
-                worker_indices = self.find_workers_random(1, missing_probes, self.small_not_big_partition_workers)
+                worker_indices = self.find_workers_random(1, missing_probes, self.small_not_big_partition_workers,0)
                 self.try_round_of_probing(current_time,job,worker_indices,probe_events,ROUNDS_SCHEDULING+1)  
+                stats.STATS_FALLBACKS_TO_SP +=1
         
         return probe_events
 
@@ -1098,7 +1180,8 @@ SMALL = 0
 
 job_start_tstamps = {}
 
-if(len(sys.argv) != 21):
+random.seed(123456798)
+if(len(sys.argv) != 23):
     print "Incorrent number of parameters."
     sys.exit(1)
 
@@ -1122,9 +1205,11 @@ STEALING_ATTEMPTS               = int(sys.argv[16])         #cap on the nr of no
 TOTAL_WORKERS                   = int(sys.argv[17])
 SRPT_ENABLED                    = (sys.argv[18] == "yes")
 HEARTBEAT_DELAY                 = int(sys.argv[19])
-SYSTEM_SIMULATED                = sys.argv[20]  
+MIN_NR_PROBES                   = int(sys.argv[20])
+SBP_ENABLED                     = (sys.argv[21] == "yes")
+SYSTEM_SIMULATED                = sys.argv[22]  
 
-MIN_NR_PROBES = 20 #1/100*TOTAL_WORKERS
+#MIN_NR_PROBES = 20 #1/100*TOTAL_WORKERS
 CAP_SRPT_SBP = 5 #cap on the % of slowdown a job can tolerate for SRPT and SBP
 
 t1 = time.time()
@@ -1138,13 +1223,38 @@ print "Simulation ended in ", (time.time() - t1), " s "
 finished_file.close()
 load_file.close()
 
-print >> stats_file, "STATS_SH_QUEUED_BEHIND_BIG:      ",        stats.STATS_SH_QUEUED_BEHIND_BIG 
-print >> stats_file, "STATS_SH_EXEC_IN_BP:             ",               stats.STATS_SH_EXEC_IN_BP
-print >> stats_file, "STATS_SH_WAITED_FOR_BIG:         ",           stats.STATS_SH_WAITED_FOR_BIG
+
+print >> stats_file, "STATS_SH_PROBES_ASSIGNED_IN_BP:      ",    stats.STATS_SH_PROBES_ASSIGNED_IN_BP
+print >> stats_file, "STATS_SH_PROBES_QUEUED_BEHIND_BIG:      ",    stats.STATS_SH_PROBES_QUEUED_BEHIND_BIG 
+print >> stats_file, "STATS_TASKS_SH_EXEC_IN_BP:             ",     stats.STATS_TASKS_SH_EXEC_IN_BP
+print >> stats_file, "STATS_SHORT_TASKS_WAITED_FOR_BIG:         ",           stats.STATS_SHORT_TASKS_WAITED_FOR_BIG
+print >> stats_file, "STATS_SHORT_JOBS_HAVING_TASKS_THAT_WAITED_FOR_BIG:         ",           len(s.jobs_affected_by_holb)
 print >> stats_file, "                                 "
-print >> stats_file, "STATS_TOTAL_STOLEN_TASKS:        ",          stats.STATS_TOTAL_STOLEN_TASKS 
-print >> stats_file, "STATS_SUCCESSFUL_STEAL_ATTEMPTS: ",   stats.STATS_SUCCESSFUL_STEAL_ATTEMPTS
+print >> stats_file, "STATS_TOTAL_STOLEN_PROBES:        ",           stats.STATS_TOTAL_STOLEN_PROBES 
+print >> stats_file, "STATS_TOTAL_STOLEN_B_FROM_B_PROBES:        ",           stats.STATS_TOTAL_STOLEN_B_FROM_B_PROBES 
+print >> stats_file, "STATS_TOTAL_STOLEN_S_FROM_S_PROBES:        ",           stats.STATS_TOTAL_STOLEN_S_FROM_S_PROBES 
+print >> stats_file, "STATS_TOTAL_STOLEN_S_FROM_B_PROBES:        ",           stats.STATS_TOTAL_STOLEN_S_FROM_B_PROBES 
+print >> stats_file, "STATS_SHORT_UNSUCC_PROBES_IN_BIG:        ",           stats.STATS_SHORT_UNSUCC_PROBES_IN_BIG 
+    
+print >> stats_file, "STATS_SUCCESSFUL_STEAL_ATTEMPTS: ",           stats.STATS_SUCCESSFUL_STEAL_ATTEMPTS
 print >> stats_file, "STATS_STEALING_MESSAGES:         ",           stats.STATS_STEALING_MESSAGES
-print >> stats_file, "STATS_STICKY_PROBES:             ",           stats.STATS_STICKY_PROBES
+print >> stats_file, "                                 "
+print >> stats_file, "STATS_STICKY_EXECUTIONS:             ",           stats.STATS_STICKY_EXECUTIONS
+print >> stats_file, "STATS_STICKY_EXECUTIONS_IN_BP:             ",           stats.STATS_STICKY_EXECUTIONS_IN_BP
+print >> stats_file, "STATS_REASSIGNED_PROBES:             ",           stats.STATS_REASSIGNED_PROBES
+print >> stats_file, "STATS_BYPASSEDBYBIG_AND_STUCK:             ",           stats.STATS_BYPASSEDBYBIG_AND_STUCK
+print >> stats_file, "STATS_FALLBACKS_TO_SP:             ",           stats.STATS_FALLBACKS_TO_SP
+print >> stats_file, "STATS_RND_FIRST_ROUND_NO_LOCAL_BITMAP:             ",           stats.STATS_RND_FIRST_ROUND_NO_LOCAL_BITMAP
+if(stats.STATS_ROUNDS_ATTEMPTS!=0):
+    print >> stats_file, "STATS_ROUNDS/STATS_ROUNDS_ATTEMPTS:             ",           stats.STATS_ROUNDS*1.0/stats.STATS_ROUNDS_ATTEMPTS
+    print >> stats_file, "STATS_PERC_1ST_ROUNDS/STATS_ROUNDS_ATTEMPTS:    ",           stats.STATS_PERC_1ST_ROUNDS*1.0/stats.STATS_ROUNDS_ATTEMPTS
+print >> stats_file, "                                 "
+print >> stats_file, "STATS_TASKS_TOTAL_FINISHED:             ",          stats.STATS_TASKS_TOTAL_FINISHED
+print >> stats_file, "STATS_TASKS_SHORT_FINISHED:             ",          stats.STATS_TASKS_SHORT_FINISHED
+print >> stats_file, "STATS_TASKS_LONG_FINISHED:             ",          stats.STATS_TASKS_LONG_FINISHED
+print >> stats_file, "STATS_JOBS_FINISHED:             ",          s.jobs_scheduled
+
+if(SYSTEM_SIMULATED=="Eagle"):
+    print >> stats_file, "%TASKS AFFECTED BY HOLB ",stats.STATS_SHORT_TASKS_WAITED_FOR_BIG*1.0/stats.STATS_TASKS_SHORT_FINISHED," %JOBS ",len(s.jobs_affected_by_holb)*1.0/s.jobs_scheduled
 
 stats_file.close()
