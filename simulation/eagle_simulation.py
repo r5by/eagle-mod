@@ -105,9 +105,9 @@ class Job(object):
     #Job class
     def update_remaining_time(self):
         self.remaining_exec_time -= self.estimated_task_duration
-        assert(self.remaining_exec_time >=0)
+        #assert(self.remaining_exec_time >=0)
         if (len(self.unscheduled_tasks) == 0): #Improvement
-            remaining_exec_time = -1
+            self.remaining_exec_time = -1
 
 #####################################################################################################################
 #####################################################################################################################
@@ -691,7 +691,7 @@ class Worker(object):
                 if(jump_ok):
                     position_in_queue = position_it
                     estimated_delay = estimated_task_duration
-                    min_remanining_exec_time = remaining
+                    min_remaining_exec_time = remaining
                     chosen_is_big = job_bydef_big
                     if (chosen_is_big):
                         break;
