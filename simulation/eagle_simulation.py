@@ -730,7 +730,7 @@ class Worker(object):
                 if(estimated_task_duration < shortest_slack_in_front):        
                     position_in_queue = position_it
                     estimated_delay = self.simulation.jobs[job_id].estimated_task_duration
-                    min_remanining_exec_time = remaining # Optimization
+                    min_remaining_exec_time = remaining # Optimization
 
             # calculate shortest slack for next probes
             if (CAP_SRPT_SBP != float('inf')):
