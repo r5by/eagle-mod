@@ -26,6 +26,7 @@ import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.util.List;
 
+import ch.epfl.eagle.daemon.util.Network;
 import org.apache.commons.configuration.Configuration;
 import org.apache.thrift.TException;
 
@@ -88,7 +89,8 @@ public class NodeMonitorThrift implements NodeMonitorService.Iface,
         DEFAULT_INTERNAL_THRIFT_THREADS);
     TServers.launchThreadedThriftServer(internalPort, internalThreads, internalProcessor);
 
-    internalAddr = new InetSocketAddress(InetAddress.getLocalHost(), internalPort);
+//    internalAddr = new InetSocketAddress(InetAddress.getLocalHost(), internalPort);
+    internalAddr = new InetSocketAddress(Network.getHostName(conf), internalPort);
   }
 
   @Override

@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 
+import ch.epfl.eagle.thrift.*;
 import org.apache.commons.configuration.PropertiesConfiguration;
 import org.apache.log4j.Logger;
 import org.apache.thrift.TException;
@@ -33,12 +34,7 @@ import org.apache.thrift.TException;
 import ch.epfl.eagle.daemon.util.Network;
 import ch.epfl.eagle.daemon.util.TClients;
 import ch.epfl.eagle.daemon.util.TServers;
-import ch.epfl.eagle.thrift.FrontendService;
-import ch.epfl.eagle.thrift.IncompleteRequestException;
-import ch.epfl.eagle.thrift.SchedulerService;
 import ch.epfl.eagle.thrift.SchedulerService.Client;
-import ch.epfl.eagle.thrift.TSchedulingRequest;
-import ch.epfl.eagle.thrift.TUserGroupInfo;
 //[[FLORIN
 import java.util.Random;
 
@@ -59,10 +55,10 @@ public class EagleFrontendClient {
 
   /**
    * Initialize a connection to an eagle scheduler.
-   * @param eagleSchedulerAddr. The socket address of the Eagle scheduler.
-   * @param app. The application id. Note that this must be consistent across frontends
+   * @param eagleSchedulerAddr The socket address of the Eagle scheduler.
+   * @param app The application id. Note that this must be consistent across frontends
    *             and backends.
-   * @param frontendServer. A class which implements the frontend server interface (for
+   * @param frontendServer A class which implements the frontend server interface (for
    *                        communication from Eagle).
    * @throws IOException
    */
@@ -75,12 +71,12 @@ public class EagleFrontendClient {
 
   /**
    * Initialize a connection to an eagle scheduler.
-   * @param eagleSchedulerAddr. The socket address of the Eagle scheduler.
-   * @param app. The application id. Note that this must be consistent across frontends
+   * @param eagleSchedulerAddr The socket address of the Eagle scheduler.
+   * @param app The application id. Note that this must be consistent across frontends
    *             and backends.
-   * @param frontendServer. A class which implements the frontend server interface (for
+   * @param frontendServer A class which implements the frontend server interface (for
    *                        communication from Eagle).
-   * @param listenPort. The port on which to listen for request from the scheduler.
+   * @param listenPort The port on which to listen for request from the scheduler.
    * @throws IOException
    */
   public void initialize(InetSocketAddress eagleSchedulerAddr, String app,
