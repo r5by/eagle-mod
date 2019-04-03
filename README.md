@@ -4,6 +4,9 @@ Hawk/Eagle-beta
 What is it?
 -----------
 
+### Mod
+This project has been modified from its original version by adding examples to read trace files directly.
+
 ### Hawk
 
 Hawk is a Hybrid Data Center Scheduler presented at [Usenix ATC 2015](https://www.usenix.org/conference/atc15/technical-session/presentation/delgado)
