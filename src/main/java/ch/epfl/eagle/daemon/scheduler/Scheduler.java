@@ -78,6 +78,11 @@ public class Scheduler {
 	// java.util.Random().nextInt(30000));
 	private AtomicInteger counter = new AtomicInteger(0);
 
+	/**
+	 * Used to keep the reservation records of each arrived request; Initialized at handleJobSubmission; key->value is requestId -> defined book-keeping structure
+	 */
+	HashMap<String, RequestTasksRecords> records = new HashMap<String, RequestTasksRecords>();
+
 	/** How many times the special case has been triggered. */
 	private AtomicInteger specialCaseCounter = new AtomicInteger(0);
 
@@ -463,6 +468,10 @@ public class Scheduler {
 
 		String requestId = getRequestId();
 
+		//Init records for the request
+		LOG.debug("Eagle start handling request: " + requestId + " at time stamp: " + start);
+		records.put(requestId, new RequestTasksRecords(start, request.getTasksSize()));
+
 		String user = "";
 		if (request.getUser() != null && request.getUser().getUser() != null) {
 			user = request.getUser().getUser();
@@ -699,18 +708,70 @@ public class Scheduler {
 	public void sendFrontendMessage(String app, TFullTaskId taskId, int status, ByteBuffer message) {
 		LOG.debug(Logging.functionCall(app, taskId, message));
 		InetSocketAddress frontend = frontendSockets.get(app);
+
+		//When a task is completed, remove the task from the request
+		String requestId = taskId.requestId;
+		RequestTasksRecords record = records.get(requestId);
+		record.handleTaskComplete();
+
 		if (frontend == null) {
 			LOG.error("Requested message sent to unregistered app: " + app);
 		}
 		try {
+//			FrontendService.AsyncClient client = frontendClientPool.borrowClient(frontend);
+//			client.frontendMessage(taskId, status, message, new sendFrontendMessageCallback(frontend, client));
 			FrontendService.AsyncClient client = frontendClientPool.borrowClient(frontend);
-			client.frontendMessage(taskId, status, message, new sendFrontendMessageCallback(frontend, client));
+
+			if(record.allTasksCompleted()) { //If all tasks of the request completed, set status as 1 and pass the elapsed time to frontend output
+				ByteBuffer msg = ByteBuffer.allocate(8);
+				msg.putLong(record.elapsed());
+				msg.position(0);
+
+				client.frontendMessage(taskId, 1, msg,
+						new sendFrontendMessageCallback(frontend, client));
+			} else {
+				client.frontendMessage(taskId, status, message,
+						new sendFrontendMessageCallback(frontend, client));
+			}
 		} catch (IOException e) {
 			LOG.error("Error launching message on frontend: " + app, e);
 		} catch (TException e) {
 			LOG.error("Error launching message on frontend: " + app, e);
 		} catch (Exception e) {
 			LOG.error("Error launching message on frontend: " + app, e);
+		}
+	}
+
+	//===============================
+	// Extension: Instruments
+	//===============================
+
+	/**
+	 * Per-request related reservation book-keeping. Used to instrument Sparrow so we know the elapsed time for every request (the time starting from incoming request gets scheduled, to the last of its task finished)
+	 */
+	class RequestTasksRecords {
+		long start;
+		long end;
+		int remainingTasks;
+
+		RequestTasksRecords(long pStart, int tasksSize) {
+			start = pStart;
+			remainingTasks = tasksSize;
+		}
+
+		/* When a task complete, decrease the reservations; if no reservations left record the end time stamp */
+		void handleTaskComplete() {
+			remainingTasks--;
+			if(remainingTasks ==0)
+				end = System.currentTimeMillis();
+		}
+
+		boolean allTasksCompleted() {
+			return (remainingTasks == 0);
+		}
+
+		long elapsed() {
+			return end - start;
 		}
 	}
 }

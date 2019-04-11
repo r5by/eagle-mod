@@ -171,6 +171,10 @@ public class NodeMonitor {
 	public void tasksFinished(List<TFullTaskId> tasks) {
 		LOG.debug(System.currentTimeMillis() + " " + Logging.functionCall(tasks));
 		scheduler.tasksFinished(tasks);
+
+		//Instrument Eagle to simulating send taskComplete() back to scheduler
+		TFullTaskId task = tasks.get(0);
+		sendFrontendMessage(task.appId, task, 0, null);
 	}
 
 	/* ********************************************************

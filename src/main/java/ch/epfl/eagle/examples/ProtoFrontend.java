@@ -105,7 +105,11 @@ public class ProtoFrontend implements FrontendService.Iface {
     @Override
     public void frontendMessage(TFullTaskId taskId, int status, ByteBuffer message) throws TException {
         // We don't use messages here, so just log it.
-        LOG.debug("Got unexpected message: " + Serialization.getByteBufferContents(message));
+//        LOG.debug("Got unexpected message: " + Serialization.getByteBufferContents(message));
+        LOG.debug("Task: " + taskId.getTaskId() + " for request: " + taskId.requestId + " has completed!");
+        if(status == 1) {
+            LOG.debug("All tasks for request: " + taskId.requestId + " have been completed. The total elapsed time is: " + message.getLong(message.position()) + " ms");
+        }
     }
 
     public void start(String[] args) {
