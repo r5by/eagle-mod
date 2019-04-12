@@ -722,17 +722,22 @@ public class Scheduler {
 //			client.frontendMessage(taskId, status, message, new sendFrontendMessageCallback(frontend, client));
 			FrontendService.AsyncClient client = frontendClientPool.borrowClient(frontend);
 
-			if(record.allTasksCompleted()) { //If all tasks of the request completed, set status as 1 and pass the elapsed time to frontend output
-				ByteBuffer msg = ByteBuffer.allocate(8);
-				msg.putLong(record.elapsed());
-				msg.position(0);
+			synchronized (record) {
+				if(record.allTasksCompleted()) { //If all tasks of the request completed, set status as 1 and pass the elapsed time to frontend output
+					ByteBuffer msg = ByteBuffer.allocate(8);
+					msg.putLong(record.elapsed());
+					msg.position(0);
 
-				client.frontendMessage(taskId, 1, msg,
-						new sendFrontendMessageCallback(frontend, client));
-			} else {
-				client.frontendMessage(taskId, status, message,
-						new sendFrontendMessageCallback(frontend, client));
+					client.frontendMessage(taskId, 1, msg,
+							new sendFrontendMessageCallback(frontend, client));
+
+					records.remove(requestId);
+				} else {
+					client.frontendMessage(taskId, status, message,
+							new sendFrontendMessageCallback(frontend, client));
+				}
 			}
+
 		} catch (IOException e) {
 			LOG.error("Error launching message on frontend: " + app, e);
 		} catch (TException e) {
@@ -767,7 +772,11 @@ public class Scheduler {
 		}
 
 		boolean allTasksCompleted() {
-			return (remainingTasks == 0);
+			if(remainingTasks == 0) {
+				remainingTasks = -1; //Reset the flag to avoid multiple access the critical section
+				return true;
+			} else
+				return false;
 		}
 
 		long elapsed() {
