@@ -107,8 +107,14 @@ public class ProtoFrontend implements FrontendService.Iface {
         // We don't use messages here, so just log it.
 //        LOG.debug("Got unexpected message: " + Serialization.getByteBufferContents(message));
         LOG.debug("Task: " + taskId.getTaskId() + " for request: " + taskId.requestId + " has completed!");
-        if(status == 1) {
-            LOG.debug("All tasks for request: " + taskId.requestId + " have been completed. The total elapsed time is: " + message.getLong(message.position()) + " ms");
+
+        switch (status) {
+            case 1:
+                LOG.debug("All tasks for request: " + taskId.requestId + " have been completed (Short Job). The total elapsed time is: " + message.getLong(message.position()) + " ms");
+                break;
+            case 2:
+                LOG.debug("All tasks for request: " + taskId.requestId + " have been completed (Long job). The total elapsed time is: " + message.getLong(message.position()) + " ms");
+                break;
         }
     }
 

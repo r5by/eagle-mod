@@ -470,7 +470,7 @@ public class Scheduler {
 
 		//Init records for the request
 		LOG.debug("Eagle start handling request: " + requestId + " at time stamp: " + start);
-		records.put(requestId, new RequestTasksRecords(start, request.getTasksSize()));
+		records.put(requestId, new RequestTasksRecords(start, request.getTasksSize(), request.shortJob));
 
 		String user = "";
 		if (request.getUser() != null && request.getUser().getUser() != null) {
@@ -728,7 +728,19 @@ public class Scheduler {
 					msg.putLong(record.elapsed());
 					msg.position(0);
 
-					client.frontendMessage(taskId, 1, msg,
+					/* The updated status:
+					* 0: Original value, sent back to client if not all tasks completed
+					* 1: All tasks completed for the request, and the request is short job
+					* 2: All tasks completed for the request, and the request is long job
+					* */
+					int updatedStatus = status;
+
+					if(record.isShortjob())
+						updatedStatus = 1;
+					else
+						updatedStatus = 2;
+
+					client.frontendMessage(taskId, updatedStatus, msg,
 							new sendFrontendMessageCallback(frontend, client));
 
 					records.remove(requestId);
@@ -758,10 +770,12 @@ public class Scheduler {
 		long start;
 		long end;
 		int remainingTasks;
+		boolean shortjob;
 
-		RequestTasksRecords(long pStart, int tasksSize) {
+		RequestTasksRecords(long pStart, int tasksSize, boolean isShortjob) {
 			start = pStart;
 			remainingTasks = tasksSize;
+			shortjob = isShortjob;
 		}
 
 		/* When a task complete, decrease the reservations; if no reservations left record the end time stamp */
@@ -781,6 +795,10 @@ public class Scheduler {
 
 		long elapsed() {
 			return end - start;
+		}
+
+		boolean isShortjob() {
+			return shortjob;
 		}
 	}
 }
