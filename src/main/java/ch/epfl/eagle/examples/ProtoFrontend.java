@@ -47,6 +47,9 @@ public class ProtoFrontend implements FrontendService.Iface {
      * trace file config.
      */
     public static final String TR_PATH = "tr_path";
+    public static final String TOTAL_NUM_OF_REQUESTS = "total_num_of_requests";
+    private long totalNumOfRequests;
+    private long completedNumOfRequests;
 
     /* For Huiyang's experiments */
     public static final String TR_CUTOFF = "tr_cutoff";
@@ -111,9 +114,11 @@ public class ProtoFrontend implements FrontendService.Iface {
         switch (status) {
             case 1:
                 LOG.debug("All tasks for request: " + taskId.requestId + " have been completed (Short Job). The total elapsed time is: " + message.getLong(message.position()) + " ms");
+                completedNumOfRequests++;
                 break;
             case 2:
                 LOG.debug("All tasks for request: " + taskId.requestId + " have been completed (Long job). The total elapsed time is: " + message.getLong(message.position()) + " ms");
+                completedNumOfRequests++;
                 break;
         }
     }
@@ -149,6 +154,9 @@ public class ProtoFrontend implements FrontendService.Iface {
                     SchedulerThrift.DEFAULT_SCHEDULER_THRIFT_PORT);
             String schedulerHost = conf.getString(SCHEDULER_HOST, DEFAULT_SCHEDULER_HOST);
             cutoff = conf.getDouble(TR_CUTOFF);
+
+            totalNumOfRequests = conf.getLong(TOTAL_NUM_OF_REQUESTS);
+            completedNumOfRequests = 0;
 
             client = new EagleFrontendClient();
             client.initialize(new InetSocketAddress(schedulerHost, schedulerPort), APPLICATION_ID, this);
@@ -203,7 +211,10 @@ public class ProtoFrontend implements FrontendService.Iface {
 
             long startTime = System.currentTimeMillis();
             LOG.debug("sleeping");
-            while (System.currentTimeMillis() < startTime + exprTime) {
+//            while (System.currentTimeMillis() < startTime + exprTime) {
+//                Thread.sleep(100);
+//            }
+            while (totalNumOfRequests != completedNumOfRequests) {
                 Thread.sleep(100);
             }
             taskLauncher.shutdown();

@@ -1,0 +1,40 @@
+This script automates the deployment of a Eagle cluster on ec2. To use it:
+
+1) Get an ec2 account.
+
+2) Get your access key ID and value from ec2. You need to have these available
+   in environment variables AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
+   respectively.
+
+3) Generate a key-pair in the AWS control panel in the "US East" datacenter.
+
+4) Run ./ec2_exp.sh --help to see how the script works.
+
+   The basic workflow would is usually like this.
+   # Launch instances
+   # full name to .pem key file needs to be passed in
+   # Following command will launch a cluster named "eagle",  create 2 backends and 1 frontend with m4.large instance type on EC2
+   # NOTE: VPC AMI chosen needs to support m4 series instances
+   ./ec2-exp.sh launch eagle -k eastkey -i ~/.ssh/eastkey.pem -b 2 -f 1 -t m4.large -a ami-7c9a0115
+
+   # Deploy Eagle files, waiting 100 seconds for instances to boot before
+   # attempting to contact them.
+   ./ec2-exp.sh deploy eagle -i /Users/ruby_/.ssh/eastkey.pem -n 2 -l YH2.tr --cpus 1
+
+   # Start Eagle daemons on each node
+   ./ec2-exp.sh start-eagle eagle -i /Users/ruby_/.ssh/eastkey.pem
+
+   # Start proto application (reading trace files)
+   ./ec2-exp.sh start-proto eagle -i /Users/ruby_/.ssh/eastkey.pem
+
+   # Stop proto application
+   ./ec2-exp.sh stop-proto eagle -i /Users/ruby_/.ssh/eastkey.pem
+
+   # Stop Sparrow
+   ./ec2-exp.sh stop-eagle eagle -i /Users/ruby_/.ssh/eastkey.pem
+
+   # Collect logs to local directories for later analytics
+  ./ec2-exp.sh collect-logs eagle -i /Users/ruby_/.ssh/eastkey.pem -d <local_dir_for_logs>
+
+   # Shut down the cluster (terminate)
+   ./ec2-exp.sh terminate eagle -i /Users/ruby_/.ssh/eastkey.pem
