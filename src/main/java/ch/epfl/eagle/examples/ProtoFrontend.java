@@ -16,9 +16,7 @@ import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import org.apache.thrift.TException;
 
-import java.io.BufferedReader;
-import java.io.FileInputStream;
-import java.io.InputStreamReader;
+import java.io.*;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -42,14 +40,16 @@ public class ProtoFrontend implements FrontendService.Iface {
     public static final String SCHEDULER_HOST = "scheduler_host";
     public static final String DEFAULT_SCHEDULER_HOST = "localhost";
     public static final String SCHEDULER_PORT = "scheduler_port";
+    public static final String TOTAL_NUM_OF_REQUESTS = "total_num_of_requests";
 
     /**
      * trace file config.
      */
     public static final String TR_PATH = "tr_path";
-    public static final String TOTAL_NUM_OF_REQUESTS = "total_num_of_requests";
-    private long totalNumOfRequests;
-    private long completedNumOfRequests;
+
+    /* For multi-schedulers */
+    public static final String SCHEDULER_ID = "scheduler_id";
+    public static final String SCHEDULER_SIZE = "scheduler_size";
 
     /* For Huiyang's experiments */
     public static final String TR_CUTOFF = "tr_cutoff";
@@ -58,6 +58,9 @@ public class ProtoFrontend implements FrontendService.Iface {
     private static final TUserGroupInfo USER = new TUserGroupInfo();
 
     private EagleFrontendClient client;
+
+    private long totalNumberOfRequests;
+    private long completedRequestsCount;
 
     private class JobLaunchRunnable implements Runnable {
         //        private int requestId;
@@ -110,16 +113,35 @@ public class ProtoFrontend implements FrontendService.Iface {
         // We don't use messages here, so just log it.
 //        LOG.debug("Got unexpected message: " + Serialization.getByteBufferContents(message));
         LOG.debug("Task: " + taskId.getTaskId() + " for request: " + taskId.requestId + " has completed!");
-
         switch (status) {
             case 1:
-                LOG.debug("All tasks for request: " + taskId.requestId + " have been completed (Short Job). The total elapsed time is: " + message.getLong(message.position()) + " ms");
-                completedNumOfRequests++;
+                completedRequestsCount++;
+                LOG.debug("All tasks for request: " + taskId.requestId + " have been completed Type " + "Short Job" + " The total elapsed time is: " + message.getLong(message.position()) + " ms");
+                String requestInfo = "All tasks for request: " + taskId.requestId + " have been completed Type " + "Short Job" + " The total elapsed time is: " + message.getLong(message.position()) + " ms";
+                CreateNewTxt(requestInfo);
                 break;
             case 2:
-                LOG.debug("All tasks for request: " + taskId.requestId + " have been completed (Long job). The total elapsed time is: " + message.getLong(message.position()) + " ms");
-                completedNumOfRequests++;
+                completedRequestsCount++;
+                LOG.debug("All tasks for request: " + taskId.requestId + " have been completed Type " + "Long Job" + " The total elapsed time is: " + message.getLong(message.position()) + " ms");
+                requestInfo = "All tasks for request: " + taskId.requestId + " have been completed Type " + "Long Job" + " The total elapsed time is: " + message.getLong(message.position()) + " ms";
+                CreateNewTxt(requestInfo);
                 break;
+        }
+
+    }
+
+    /*Output txt file*/
+    public void CreateNewTxt(String requestInfo){
+        BufferedWriter output = null;
+        try {
+            File file = new File("requestInfo.txt");
+            output = new BufferedWriter(new OutputStreamWriter(
+                    new FileOutputStream(file, true), "utf-8"));
+            output.write(requestInfo+"\r\n");
+            output.flush();
+            output.close();
+        } catch ( IOException e ) {
+            e.printStackTrace();
         }
     }
 
@@ -150,17 +172,21 @@ public class ProtoFrontend implements FrontendService.Iface {
 //            Double traceCutOff = conf.getDouble(TR_CUTOFF, TR_CUTOFF_DEFAULT);
 //            traceCutOffMilliSec = traceCutOff.longValue();
 
+            int counter = 0;
+            int schedulerId = conf.getInt(SCHEDULER_ID);
+            int schedulerSize = conf.getInt(SCHEDULER_SIZE);
+
             int schedulerPort = conf.getInt(SCHEDULER_PORT,
                     SchedulerThrift.DEFAULT_SCHEDULER_THRIFT_PORT);
             String schedulerHost = conf.getString(SCHEDULER_HOST, DEFAULT_SCHEDULER_HOST);
             cutoff = conf.getDouble(TR_CUTOFF);
-
-            totalNumOfRequests = conf.getLong(TOTAL_NUM_OF_REQUESTS);
-            completedNumOfRequests = 0;
+            totalNumberOfRequests = conf.getLong(TOTAL_NUM_OF_REQUESTS);
 
             client = new EagleFrontendClient();
             client.initialize(new InetSocketAddress(schedulerHost, schedulerPort), APPLICATION_ID, this);
 
+            //set experiment count
+            completedRequestsCount = 0;
 
             FileInputStream inputStream = new FileInputStream(trPath);
             BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(inputStream));
@@ -178,32 +204,35 @@ public class ProtoFrontend implements FrontendService.Iface {
 
             while((str = bufferedReader.readLine()) != null)
             {
-                str = str+"\r\n";
-                String[] SubmissionTime =  str.split("\\s{1,}|\t");
-                arrivalInterval = Double.parseDouble(SubmissionTime[0]);
+                if(counter % schedulerSize == schedulerId) {
+                    str = str+"\r\n";
+                    String[] SubmissionTime =  str.split("\\s{1,}|\t");
+                    arrivalInterval = Double.parseDouble(SubmissionTime[0]);
 
-                arrivalIntervalinMilliSec = Double.valueOf(arrivalInterval * 1000).longValue();
+                    arrivalIntervalinMilliSec = Double.valueOf(arrivalInterval * 1000).longValue();
 
-                averageDuriationMilliSec = Double.parseDouble(SubmissionTime[2]) * 1000;
+                    averageDuriationMilliSec = Double.parseDouble(SubmissionTime[2]) * 1000;
 
-                String[] dictionary = str.split("\\s{2}|\t");
-                //tasks = null;
-                for(int i = 1;i<dictionary.length-1;i++){
-                    //change second to milliseconds
-                    double taskDinMilliSec = Double.valueOf(dictionary[i]) * 1000;
-                    tasks.add(taskDinMilliSec);
+                    String[] dictionary = str.split("\\s{2}|\t");
+                    //tasks = null;
+                    for(int i = 1;i<dictionary.length-1;i++){
+                        //change second to milliseconds
+                        double taskDinMilliSec = Double.valueOf(dictionary[i]) * 1000;
+                        tasks.add(taskDinMilliSec);
 
+                    }
+
+                    //Estimated experiment duration
+                    exprTime += averageDuriationMilliSec * tasks.size();
+
+                    ProtoFrontend.JobLaunchRunnable runnable = new JobLaunchRunnable(arrivalIntervalinMilliSec, averageDuriationMilliSec,tasks);
+                    taskLauncher.schedule(runnable,  arrivalIntervalinMilliSec, TimeUnit.MILLISECONDS);
+
+                    requestId++;
+                    System.out.println(tasks);
+                    tasks.clear();
                 }
-
-                //Estimated experiment duration
-                exprTime += averageDuriationMilliSec * tasks.size();
-
-                ProtoFrontend.JobLaunchRunnable runnable = new JobLaunchRunnable(arrivalIntervalinMilliSec, averageDuriationMilliSec,tasks);
-                taskLauncher.schedule(runnable,  arrivalIntervalinMilliSec, TimeUnit.MILLISECONDS);
-
-                requestId++;
-                System.out.println(tasks);
-                tasks.clear();
+                counter++;
             }
             System.out.println(tasks);
             inputStream.close();
@@ -214,7 +243,7 @@ public class ProtoFrontend implements FrontendService.Iface {
 //            while (System.currentTimeMillis() < startTime + exprTime) {
 //                Thread.sleep(100);
 //            }
-            while (totalNumOfRequests != completedNumOfRequests) {
+            while(totalNumberOfRequests != completedRequestsCount) {
                 Thread.sleep(100);
             }
             taskLauncher.shutdown();

@@ -15,7 +15,7 @@
 #
 
 import boto
-import boto3
+#import boto3
 import os
 import sys
 import tempfile
@@ -403,6 +403,7 @@ def start_proto(frontends, backends, opts):
   print "Starting Proto backends..."
   ssh_all([be.public_dns_name for be in backends], opts,
          "/root/start_proto_backend.sh")
+  # TODO: check if we need to sleep some time to wait for backends start-up
   print "Starting Proto frontends..."
   ssh_all([fe.public_dns_name for fe in frontends], opts,
           "/root/start_proto_frontend.sh")
