@@ -395,8 +395,8 @@ def stop_eagle(frontends, backends, opts):
     all_machines.append(fe.public_dns_name)
   for be in backends:
     all_machines.append(be.public_dns_name)
-  print "Stopping eagle on all machines..."
-  ssh_all(all_machines, opts, "/root/stop_eagle.sh;")
+  print "Stopping eagle and cleaning logs on all machines..."
+  ssh_all(all_machines, opts, "/root/stop_eagle.sh; /root/clean_logs.sh")
 
 # Start the prototype backends/frontends
 def start_proto(frontends, backends, opts):
@@ -406,7 +406,7 @@ def start_proto(frontends, backends, opts):
   # TODO: check if we need to sleep some time to wait for backends start-up
   print "Starting Proto frontends..."
   ssh_all([fe.public_dns_name for fe in frontends], opts,
-          "/root/start_proto_frontend.sh")
+          "/root/start_proto_frontend.sh %s %s" % (frontends.index(fe), opts.frontends))
 
 # Start the prototype backends/frontends
 def stop_proto(frontends, backends, opts):
@@ -418,7 +418,6 @@ def stop_proto(frontends, backends, opts):
   ssh_all([be.public_dns_name for be in backends], opts,
          "/root/stop_proto_backend.sh")
 
-# TODO: Collect logs from all machines
 def collect_logs(frontends, backends, opts):
   print "Zipping logs..."
   ssh_all([fe.public_dns_name for fe in frontends], opts,
@@ -427,18 +426,18 @@ def collect_logs(frontends, backends, opts):
           "/root/prepare_logs.sh")
   print "Hauling logs"
   rsync_from_all([fe.public_dns_name for fe in frontends], opts,
-    "*.log.gz", opts.log_dir, len(frontends))
+    "*.tar.gz", opts.log_dir, len(frontends))
   rsync_from_all([be.public_dns_name for be in backends], opts,
-    "*.log.gz", opts.log_dir, len(backends))
+    "*.tar.gz", opts.log_dir, len(backends))
 #  f = open(os.path.join(opts.log_dir, "params.txt"), 'w')
 #  for (k, v) in opts.__dict__.items():
 #    f.write("%s\t%s\n" % (k, v))
 #  f.close()
 
   ssh_all([fe.public_dns_name for fe in frontends], opts,
-          "rm -f /tmp/*audit*.log.gz; mv /root/*log.gz /tmp;")
+          "rm -f /tmp/*tar.gz; mv /root/*tar.gz /tmp;")
   ssh_all([be.public_dns_name for be in backends], opts,
-          "rm -f /tmp/*audit*.log.gz; mv /root/*log.gz /tmp;")
+          "rm -f /tmp/*tar.gz; mv /root/*tar.gz /tmp;")
 
 # Tear down a cluster
 def terminate_cluster(frontends, backends, opts):

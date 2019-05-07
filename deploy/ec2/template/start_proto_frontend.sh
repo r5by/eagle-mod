@@ -10,6 +10,16 @@ if [ ! $APPCHK = '0' ]; then
   exit 1;
 fi
 
+scheduler_id_there =`cat frontend.conf |grep scheduler_id`
+if [ "X$scheduler_id_there" == "X" ]; then
+  echo "scheduler_id = $1" >> frontend.conf
+fi
+
+scheduler_size_there =`cat frontend.conf |grep scheduler_size`
+if [ "X$scheduler_size_there" == "X" ]; then
+  echo "scheduler_size = $2" >> frontend.conf
+fi
+
 nohup java -XX:+UseConcMarkSweepGC -verbose:gc -XX:+PrintGCTimeStamps -Xmx2046m -XX:+PrintGCDetails  -cp eagle-1.0-PROTOTYPE.jar ch.epfl.eagle.examples.{{frontend_type}} -c frontend.conf > $LOG 2>&1 &
 
 PID=$!

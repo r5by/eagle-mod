@@ -17,4 +17,5 @@
 #
 
 cd "`dirname $0`"
-PYTHONPATH="$PYTHONPATH:../third_party/boto-2.1.1" python ./ec2_exp.py $@
+# Find local pip installed boto location witch command: $ pip show boto
+PYTHONPATH="$PYTHONPATH:/usr/local/lib/python2.7/site-packages/boto" python ./ec2_exp.py $@
