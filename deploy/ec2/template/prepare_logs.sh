@@ -10,4 +10,4 @@ fi
 IP=`ifconfig eth0 | grep 'inet addr:' | cut -d: -f2 | awk '{ print $1}'`
 
 cd /root/
-tar cvzf ${PREFIX}_${IP}.tar.gz *.log requestInfo.txt
+tar cvzf ${PREFIX}_${IP}.tar.gz *.log *.txt

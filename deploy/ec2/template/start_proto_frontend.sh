@@ -20,6 +20,8 @@ if [ "X$scheduler_size_there" == "X" ]; then
   echo "scheduler_size = $2" >> frontend.conf
 fi
 
+# Wait for daemon ready
+sleep 15
 nohup java -XX:+UseConcMarkSweepGC -verbose:gc -XX:+PrintGCTimeStamps -Xmx2046m -XX:+PrintGCDetails  -cp eagle-1.0-PROTOTYPE.jar ch.epfl.eagle.examples.{{frontend_type}} -c frontend.conf > $LOG 2>&1 &
 
 PID=$!

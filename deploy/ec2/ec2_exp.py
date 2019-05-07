@@ -157,6 +157,16 @@ def ssh_all(hosts, opts, command):
     commands.append(cmd)
   parallel_commands(commands, 0)
 
+# Start all eagle protoFrontends
+def ssh_all_protofrontends(frontends, opts):
+    commands = []
+    for fe in frontends:
+        command = "/root/start_proto_frontend.sh %s %s" % (frontends.index(fe), opts.frontends)
+        cmd = "ssh -t -o StrictHostKeyChecking=no -i %s root@%s '%s'" % \
+              (opts.identity_file, fe.public_dns_name, command)
+        commands.append(cmd)
+    parallel_commands(commands, 0)
+
 # Launch a cluster and return instances launched
 def launch_cluster(conn, opts, cluster_name):
   backend_group = get_or_make_group(conn, "%s-backends" % cluster_name)
@@ -405,8 +415,9 @@ def start_proto(frontends, backends, opts):
          "/root/start_proto_backend.sh")
   # TODO: check if we need to sleep some time to wait for backends start-up
   print "Starting Proto frontends..."
-  ssh_all([fe.public_dns_name for fe in frontends], opts,
-          "/root/start_proto_frontend.sh %s %s" % (frontends.index(fe), opts.frontends))
+  # ssh_all([fe.public_dns_name for fe in frontends], opts,
+  #         "/root/start_proto_frontend.sh %s %s" % (frontends.index(fe), opts.frontends))
+  ssh_all_protofrontends(frontends, opts)
 
 # Start the prototype backends/frontends
 def stop_proto(frontends, backends, opts):
