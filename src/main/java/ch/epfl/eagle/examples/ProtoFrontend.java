@@ -2,7 +2,7 @@ package ch.epfl.eagle.examples;
 
 import ch.epfl.eagle.api.EagleFrontendClient;
 import ch.epfl.eagle.daemon.scheduler.SchedulerThrift;
-import ch.epfl.eagle.daemon.util.Serialization;
+import ch.epfl.eagle.daemon.util.Network;
 import ch.epfl.eagle.thrift.FrontendService;
 import ch.epfl.eagle.thrift.TFullTaskId;
 import ch.epfl.eagle.thrift.TTaskSpec;
@@ -17,6 +17,7 @@ import org.apache.log4j.Logger;
 import org.apache.thrift.TException;
 
 import java.io.*;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -40,7 +41,7 @@ public class ProtoFrontend implements FrontendService.Iface {
     public static final String SCHEDULER_HOST = "scheduler_host";
     public static final String DEFAULT_SCHEDULER_HOST = "localhost";
     public static final String SCHEDULER_PORT = "scheduler_port";
-    public static final String TOTAL_NUM_OF_REQUESTS = "total_num_of_requests";
+//    public static final String TOTAL_NUM_OF_REQUESTS = "total_num_of_requests";
 
     /**
      * trace file config.
@@ -49,11 +50,14 @@ public class ProtoFrontend implements FrontendService.Iface {
 
     /* For multi-schedulers */
     public static final String SCHEDULER_ID = "scheduler_id";
-    public static final String SCHEDULER_SIZE = "scheduler_size";
+    public static final String DISTRIBUTED_SCHEDULER_SIZE = "distributed_scheduler_size";
 
     /* For Huiyang's experiments */
     public static final String TR_CUTOFF = "tr_cutoff";
     private double cutoff;
+
+    /* For set central scheduler*/
+    public static final String SCHEDULER_CENTRALIZED = "scheduler_centralized";
 
     private static final TUserGroupInfo USER = new TUserGroupInfo();
 
@@ -172,15 +176,16 @@ public class ProtoFrontend implements FrontendService.Iface {
 //            Double traceCutOff = conf.getDouble(TR_CUTOFF, TR_CUTOFF_DEFAULT);
 //            traceCutOffMilliSec = traceCutOff.longValue();
 
-            int counter = 0;
+            int shortjobcounter = 0;
             int schedulerId = conf.getInt(SCHEDULER_ID);
-            int schedulerSize = conf.getInt(SCHEDULER_SIZE);
+            int distributedSchedulerSize = conf.getInt(DISTRIBUTED_SCHEDULER_SIZE);
 
             int schedulerPort = conf.getInt(SCHEDULER_PORT,
                     SchedulerThrift.DEFAULT_SCHEDULER_THRIFT_PORT);
             String schedulerHost = conf.getString(SCHEDULER_HOST, DEFAULT_SCHEDULER_HOST);
             cutoff = conf.getDouble(TR_CUTOFF);
-            totalNumberOfRequests = conf.getLong(TOTAL_NUM_OF_REQUESTS);
+//            totalNumberOfRequests = conf.getLong(TOTAL_NUM_OF_REQUESTS);
+            String schedulerCentralized = conf.getString(SCHEDULER_CENTRALIZED);
 
             client = new EagleFrontendClient();
             client.initialize(new InetSocketAddress(schedulerHost, schedulerPort), APPLICATION_ID, this);
@@ -201,25 +206,26 @@ public class ProtoFrontend implements FrontendService.Iface {
             List tasks = new ArrayList();
 
             ScheduledThreadPoolExecutor taskLauncher = new ScheduledThreadPoolExecutor(1);
+            String localSchedulerIPAddress = Network.getIPAddress(conf);
 
             while((str = bufferedReader.readLine()) != null)
             {
-                if(counter % schedulerSize == schedulerId) {
-                    str = str+"\r\n";
-                    String[] SubmissionTime =  str.split("\\s{1,}|\t");
-                    arrivalInterval = Double.parseDouble(SubmissionTime[0]);
+                str = str+"\r\n";
+                String[] SubmissionTime =  str.split("\\s{1,}|\t");
+                arrivalInterval = Double.parseDouble(SubmissionTime[0]);
 
-                    arrivalIntervalinMilliSec = Double.valueOf(arrivalInterval * 1000).longValue();
+                arrivalIntervalinMilliSec = Double.valueOf(arrivalInterval * 1000).longValue();
 
-                    averageDuriationMilliSec = Double.parseDouble(SubmissionTime[2]) * 1000;
+                averageDuriationMilliSec = Double.parseDouble(SubmissionTime[2]) * 1000;
 
+//                String localSchedulerIPAddress = InetAddress.getByName(schedulerHost).getHostAddress();
+                if (averageDuriationMilliSec > cutoff && schedulerCentralized.equals(localSchedulerIPAddress)){
                     String[] dictionary = str.split("\\s{2}|\t");
                     //tasks = null;
                     for(int i = 1;i<dictionary.length-1;i++){
                         //change second to milliseconds
                         double taskDinMilliSec = Double.valueOf(dictionary[i]) * 1000;
                         tasks.add(taskDinMilliSec);
-
                     }
 
                     //Estimated experiment duration
@@ -231,8 +237,32 @@ public class ProtoFrontend implements FrontendService.Iface {
                     requestId++;
                     System.out.println(tasks);
                     tasks.clear();
+
+                    totalNumberOfRequests++;
                 }
-                counter++;
+                else if(averageDuriationMilliSec < cutoff && !schedulerCentralized.equals(localSchedulerIPAddress)){
+                    if(shortjobcounter % distributedSchedulerSize == schedulerId) {
+                        String[] dictionary = str.split("\\s{2}|\t");
+                        //tasks = null;
+                        for(int i = 1;i<dictionary.length-1;i++){
+                            //change second to milliseconds
+                            double taskDinMilliSec = Double.valueOf(dictionary[i]) * 1000;
+                            tasks.add(taskDinMilliSec);
+                        }
+                        //Estimated experiment duration
+                        exprTime += averageDuriationMilliSec * tasks.size();
+
+                        ProtoFrontend.JobLaunchRunnable runnable = new JobLaunchRunnable(arrivalIntervalinMilliSec, averageDuriationMilliSec,tasks);
+                        taskLauncher.schedule(runnable,  arrivalIntervalinMilliSec, TimeUnit.MILLISECONDS);
+
+                        requestId++;
+                        System.out.println(tasks);
+                        tasks.clear();
+
+                        totalNumberOfRequests++;
+                    }
+                    shortjobcounter++;
+                }
             }
             System.out.println(tasks);
             inputStream.close();
@@ -255,6 +285,13 @@ public class ProtoFrontend implements FrontendService.Iface {
     }
 
     public static void main(String[] args) {
+        //For remote debug
+        try {
+            Thread.sleep(5000);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
         new ProtoFrontend().start(args);
     }
 

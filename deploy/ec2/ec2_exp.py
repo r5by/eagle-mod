@@ -161,7 +161,7 @@ def ssh_all(hosts, opts, command):
 def ssh_all_protofrontends(frontends, opts):
     commands = []
     for fe in frontends:
-        command = "/root/start_proto_frontend.sh %s %s" % (frontends.index(fe), opts.frontends)
+        command = "/root/start_proto_frontend.sh %s %s" % (frontends.index(fe) - 1, opts.frontends -1)
         cmd = "ssh -t -o StrictHostKeyChecking=no -i %s root@%s '%s'" % \
               (opts.identity_file, fe.public_dns_name, command)
         commands.append(cmd)
@@ -329,6 +329,7 @@ def generate_deploy_files(frontends, backends, opts,
       "static_backends": ",".join(["%s:20502" % i.public_dns_name \
                                    for i in backends]),
       "name_node": frontends[0].public_dns_name,
+      "scheduler_centralized": frontends[0].private_ip_address,
       "backend_list": "\n".join(["%s" % i.public_dns_name \
                                  for i in backends]),
       "backend_comma_joined_list": ",".join(["%s" % i.public_dns_name \
